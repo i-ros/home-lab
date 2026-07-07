@@ -126,3 +126,34 @@ Append one line per working session: date — what changed — next step.
 ## Reminder! 
 
 The IP address was already reserved based on hardware and retained. Ethernet is .8 and wifi is .7. Ethernet will be the primary connection. We'll turn wifi off but have it there just in case. 
+
+### Session Log — 2026-07-07 (Phase 0)
+- Confirmed network: eno1 (MAC 30:9c:23:d5:68:f8) DHCP → 192.168.8.8 reservation on Brume. Netplan is DHCP + MAC-match, wifis:{} empty.
+- WiFi + Bluetooth radios soft-blocked via rfkill (persists across reboots). wlp36s0 has no netplan config.
+- System fully updated (apt full-upgrade + autoremove), rebooted clean.
+- Drive inventory + by-id mapping recorded:
+  - sda source Red (exFAT "plex", READ-ONLY): ata-WDC_WD40EFZX-68AWUN0_WD-WX32D124UYHS
+  - sdb dest Red (ext4, media): ata-WDC_WD40EFZX-68AWUN0_WD-WX62D12CCFRX
+  - sdc Black (NTFS "storage", pending format): ata-WDC_WD2003FZEX-00SRLA0_WD-WMC6N0P1DV7X
+  - nvme0n1 Samsung 970 EVO 500GB: OS
+  - nvme1n1 Inland 1TB: blank, ready for /var/lib/docker
+- WD Blue physically pulled — parking lot, diagnose later.
+- SMART baselines (smartmontools installed): all drives PASSED, zero reallocated/pending sectors. sdb UDMA CRC = 3,343, UNCHANGED from last build → supports old-cable theory. Recheck after Phase 2 checksum reads.
+- Found ~150GB Windows-era data on the Black before formatting: veracrypt/pers_container (100GiB, backed up elsewhere), OneDrive verification staging, desktop dump.
+- 128GB microSD (sde) formatted GPT+exFAT "VCBACKUP"; rsync of pers_container running in tmux session "copy".
+
+### Open Items (next session)
+1. Check tmux "copy": `tmux attach -t copy` — confirm rsync completed without errors.
+2. Verify copy: `sudo xxh128sum /mnt/tmp-peek/veracrypt/pers_container /mnt/sdcard/pers_container` — hashes must match before the Black is touched.
+3. Eject card cleanly: `sudo umount /mnt/sdcard` (exFAT + yank = corruption risk), pull card, label it.
+4. Unmount peek: `sudo umount /mnt/tmp-peek`.
+5. DECISION GATE: confirm nothing else on the Black is needed ($RECYCLE.BIN 100GB, OneDrive staging ~50GB were deemed junk — last chance).
+6. Format Black ext4 for Frigate (wipes sdc1+sdc2, single new partition).
+7. Begin Phase 1: create /mnt/media, /mnt/frigate mount points; format Inland 1TB ext4; fstab entries by-id with nofail; reboot test.
+8. Unresolved decisions still open: Samsung spare ~400GB use (decide before Phase 6), WD Blue fate (parked).
+
+### Notes for tomorrow
+- If rsync died mid-copy, just rerun the same command — rsync resumes/overwrites safely; the source is read-only and untouched.
+- If hashes MISMATCH: do not format anything. Delete card copy, rerun rsync, re-verify. Two mismatches in a row = suspect the card, not the Black.
+- fstab safety: after editing, `sudo mount -a` + `findmnt` to validate BEFORE rebooting — a bad fstab without nofail can hang boot on a headless box.
+- sdb CRC recheck command: `sudo smartctl -a /dev/sdb | grep CRC` — expect exactly 3343.
