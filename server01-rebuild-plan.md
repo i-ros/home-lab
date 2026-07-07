@@ -30,7 +30,7 @@ Services (each its own compose stack):
 
 - **CPU/board:** Ryzen 7 2700X on MSI X470 (stable BIOS flashed)
 - **GPU:** RTX 2070 — Frigate TensorRT + Plex/Frigate NVENC
-- **Network:** IP 192.168.8.3 reserved on Brume 3 by MAC — confirmed intact
+- **Network:** IP 192.168.8.8 (ethernet; 192.168.8.7 is wifi) reserved on Brume 3 by MAC — confirmed intact
 - **UPS:** CyberPower CP1500PFCLCD. USB data cable will run to **RPi5** (NUT server); server01 = NUT netclient. Cable not yet connected — low priority.
 
 ### Drives
@@ -58,7 +58,7 @@ Services (each its own compose stack):
 Work top to bottom. Don't skip ahead past an unresolved blocker.
 
 ### Phase 0 — Baseline & safety
-- [ ] Confirm SSH access, IP = 192.168.8.3, hostname set
+- [ ] Confirm SSH access, IP = 192.168.8.8, hostname set
 - [ ] `apt update && apt full-upgrade`, reboot
 - [ ] Inventory drives: `ls -l /dev/disk/by-id/`, `lsblk -o NAME,SIZE,FSTYPE,LABEL,MODEL,SERIAL` — record which by-id = which role in this doc
 - [ ] SMART baseline on all drives (`smartctl -a`), note UDMA CRC counts (esp. dest Red)
@@ -93,7 +93,7 @@ Work top to bottom. Don't skip ahead past an unresolved blocker.
 - [ ] Compose stack: TensorRT detector, NVENC, `/mnt/frigate` for recordings, shm sizing
 - [ ] Reolink E1 Zoom config (HEVC 4K/20fps main, H.264 640×360/10fps sub, RTSP direct)
 - [ ] MQTT to HA Green with dedicated `frigate` user
-- [ ] Re-point HA Frigate integration to http://192.168.8.3:8971
+- [ ] Re-point HA Frigate integration to http://192.168.8.8:8971
 - [ ] (Later) Amcrest floodlight cam — driveway; H264 main, reduced substream
 
 ### Phase 6 — Immich
@@ -122,3 +122,7 @@ Work top to bottom. Don't skip ahead past an unresolved blocker.
 Append one line per working session: date — what changed — next step.
 
 - 2026-07-06 — Plan created. Ubuntu reinstalled fresh. Next: Phase 0 baseline.
+
+## Reminder! 
+
+The IP address was already reserved based on hardware and retained. Ethernet is .8 and wifi is .7. Ethernet will be the primary connection. We'll turn wifi off but have it there just in case. 
