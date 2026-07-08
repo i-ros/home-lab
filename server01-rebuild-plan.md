@@ -144,3 +144,22 @@ Services (each its own compose stack):
 - CRC recheck: `sudo smartctl -a /dev/sdb | grep CRC` (expect 3343)
 - Ownership fix: `sudo chown -R ian:ian /mnt/media`
 - Plex launch: paste fresh token into /opt/stacks/plex/compose.yaml PLEX_CLAIM, `cd /opt/stacks/plex && docker compose up -d`
+
+## To-Do: Video Ingest Share (SMB on server01)
+
+**Goal:** LAN landing spot for iOS-shot video — fast access for editing from other devices.
+
+- [ ] Deploy Samba as Docker container (container on Inland NVMe like everything else)
+- [ ] Create bind-mount target on OS drive (970 EVO): `/srv/video-inbox`
+  - Subdirs: `inbox/` (raw phone dumps), `projects/<name>/` (active edits), `outbox/` (finished, awaiting move)
+- [ ] Create SMB user/credentials → store in Proton Pass
+- [ ] iOS: connect via Files app → `smb://192.168.8.8`
+- [ ] iOS: Settings → Photos → "Transfer to Mac or PC: Keep Originals" (avoid silent HEVC→H.264 transcode)
+- [ ] Test share from Windows ITX PC (bundle with pending brume-backup Samba test)
+
+**Rules:**
+- Working area, NOT a library — nothing here is backed up
+- Keepers → OneDrive/Immich pipeline; finished edits → Plex
+- Footage sitting in `inbox/` = at-risk/unarchived by definition
+
+**Timing:** After Phase 0 verification work. No dependency on Immich/Phase 6.
