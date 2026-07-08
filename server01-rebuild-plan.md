@@ -26,6 +26,11 @@ Services (each its own compose stack):
 5. **Architectural decisions before execution.** If a step forces an undecided choice, stop and decide first.
 6. **If a step goes wrong, cleanup/undo instructions come first** before any new approach.
 7. **Compose convention:** one dir per stack at `/opt/stacks/<service>/`, config via BIND MOUNTS (not named volumes) so a plain rsync of `/opt/stacks` backs up every service. PUID/PGID 1000, TZ America/Denver, image versions pinned (no `latest` on databases).
+8. **Working practice:** one command at a time, review output before proceeding, assume only the stated command ran. When a pattern emerges that could be standardized or made safer, proactively suggest an optimization rather than just executing — the by-id fstab rule and the /opt/stacks convention both came from this and prevented real mishaps.
+9. **GitHub / secrets discipline.** This repo is private and holds the plan. Two rules, and they're different:
+   - **Never commit credentials** — passwords, tokens, API keys. In committed docs, reference them generically (e.g. `POSTGRES_PASSWORD=<in password manager>`) without naming the manager or the entry title — where credentials live is itself sensitive. If compose files go in the repo, real values live in a `.gitignore`'d `.env`. Git history is permanent — a committed secret is compromised even after deletion, so the fix for a leaked secret is always to ROTATE it, not just delete the line.
+   - **Local network details (private-range IPs like 192.168.x.x, MACs, hostnames) ARE fine to commit** and should be — they're meaningless outside the LAN and make the doc actually usable. Don't over-redact these; scrubbing them costs clarity for zero security gain.
+   - Default posture: be specific where it's generic/local, be strict where it's a credential. When unsure whether something is repo-safe, ask — don't assume.
 
 ## Hardware
 
@@ -116,6 +121,7 @@ Services (each its own compose stack):
 - [ ] MikroTik CSS610 config backup (loose end)
 
 ### Phase 9 — Cleanup & hardening
+- [ ] **ROTATE Mealie Postgres password** — the current value was committed to git history in an earlier version of this doc. Private repo + low-value LAN password = not urgent, but history is permanent so the clean fix is rotation, not deletion. Generate a new alphanumeric password, update BOTH the `mealie` and `postgres` services in /opt/stacks/mealie/compose.yaml, `docker compose down && up -d` (Postgres keeps the old password baked into pgdata, so this also requires either recreating the DB or `ALTER USER mealie PASSWORD` inside the container — sequence to be worked out at the time). Update the password manager entry. After rotating, the old committed value is dead and harmless.
 - [ ] WD Blue decision executed
 - [ ] UFW baseline (SSH + service ports) — NOT YET configured; nothing firewalled currently
 - [ ] Unattended-upgrades
@@ -124,13 +130,13 @@ Services (each its own compose stack):
 
 ## Live Services
 
-- **Mealie** — http://192.168.8.8:9925 — /opt/stacks/mealie/ — mealie v3.20.1 + postgres:17, bind mounts (data + pgdata), ALLOW_SIGNUP=false. Creds in Proton Pass ("Mealie – Postgres DB" + "Mealie – Web Admin", separate entries, currently same value).
+- **Mealie** — http://192.168.8.8:9925 — /opt/stacks/mealie/ — mealie v3.20.1 + postgres:17, bind mounts (data + pgdata), ALLOW_SIGNUP=false. Credentials stored in password manager (DB + web admin, separate entries).
 
 ## Session Log
 
 - 2026-07-06 — Plan created. Ubuntu reinstalled fresh.
 - 2026-07-07 — Confirmed Crucial SSD ext4 intact (WSL2 copy method set). veracrypt/pers_container (100GiB) copied to microSD + xxh128 VERIFIED (7cdf603e827ae26b7a6dbe4775ba820d), card pulled/labeled. Black wiped → ext4 /mnt/frigate. dest Red → /mnt/media. Inland → /var/lib/docker. All fstab by-id+nofail, boot-tested (NVMe letters swapped, by-id held). Docker 29.6.1 + NVIDIA 580 + Container Toolkit, GPU-in-container verified. Mealie LIVE. Plex stack staged (not launched). music+videos rsynced to /mnt/media.
-- 2026-07-08 — **OPEN LOOP: media xxh128 verify running** (source vs dest, all three trees). NEXT: confirm manifests match → recheck sdb CRC (expect 3343) → chown /mnt/media to ian → then launch Plex (grab claim token) or build Frigate.
+- 2026-07-08 — **OPEN LOOP: media xxh128 verify still running** (source read slow; src.manifest 0 bytes, load ~1.0 = still grinding). NEXT: confirm manifests match → recheck sdb CRC (expect 3343) → chown /mnt/media to ian → then launch Plex (grab claim token) or build Frigate. Added GitHub/secrets discipline (Hard Rule 9) + Mealie password rotation task (Phase 9) after realizing the Postgres password was committed to git history in an earlier doc version. Built gear-inventory skill (separate deliverable, staged for repo review pending an org strategy).
 
 ### Next-session quick refs
 - Check verify status: `ls -la /tmp/*.manifest; uptime` (non-zero manifest sizes + load ~0 = done)
