@@ -2,7 +2,7 @@
 
 **Purpose:** Single source of truth for the server01 rebuild. Upload/paste this into any Claude session (any model tier) to restore full context. Update the Status column and Session Log as work progresses.
 
-**Last updated:** 2026-07-06 (initial draft)
+**Last updated:** 2026-07-08
 
 ---
 
@@ -13,8 +13,8 @@ server01 = 24/7 home server. Ubuntu Server 26.04, headless, SSH via Termius. All
 Services (each its own compose stack):
 - **Plex** (NVENC transcode via RTX 2070)
 - **Frigate** (TensorRT detection + NVENC on RTX 2070; Reolink E1 Zoom at 192.168.8.106; MQTT → Mosquitto on HA Green 192.168.8.2:1883)
-- **Immich** (likely fresh start — see Open Decisions)
-- **Mealie**
+- **Immich** (fresh start + import old originals — see Open Decisions)
+- **Mealie** — LIVE
 - Future stacks as needed
 
 ## Hard Rules
@@ -22,138 +22,119 @@ Services (each its own compose stack):
 1. **Everything runs in Docker.** No native service installs. No exceptions without a documented reason in this file.
 2. **The Plex source Red (exFAT) is READ-ONLY until checksum verification passes.** Mount `ro` or leave unmounted. Never format, never write.
 3. **Immich does not start until photo storage location is decided and mounted** (see Open Decisions) and the old-data question is resolved.
-4. **All fstab entries use `/dev/disk/by-id/`** with `nofail` on data drives. Never `/dev/sdX` — letters shuffle between boots.
+4. **All fstab entries use `/dev/disk/by-id/`** with `nofail` on data drives. Never `/dev/sdX` — letters shuffle between boots. (PROVEN 2026-07-08: NVMe letters swapped across a reboot; by-id held mounts to the correct physical drives.)
 5. **Architectural decisions before execution.** If a step forces an undecided choice, stop and decide first.
 6. **If a step goes wrong, cleanup/undo instructions come first** before any new approach.
+7. **Compose convention:** one dir per stack at `/opt/stacks/<service>/`, config via BIND MOUNTS (not named volumes) so a plain rsync of `/opt/stacks` backs up every service. PUID/PGID 1000, TZ America/Denver, image versions pinned (no `latest` on databases).
 
 ## Hardware
 
 - **CPU/board:** Ryzen 7 2700X on MSI X470 (stable BIOS flashed)
-- **GPU:** RTX 2070 — Frigate TensorRT + Plex/Frigate NVENC
-- **Network:** IP 192.168.8.8 (ethernet; 192.168.8.7 is wifi) reserved on Brume 3 by MAC — confirmed intact
+- **GPU:** RTX 2070 — driver 580-server (580.159.03, CUDA 13.0), Container Toolkit 1.19.1. Verified GPU-in-container working.
+- **Network:** eno1 (MAC 30:9c:23:d5:68:f8) → 192.168.8.8 (ethernet, primary) reserved on Brume 3. 192.168.8.7 = wifi (disabled, break-glass only). DHCP + MAC-match in netplan.
 - **UPS:** CyberPower CP1500PFCLCD. USB data cable will run to **RPi5** (NUT server); server01 = NUT netclient. Cable not yet connected — low priority.
 
 ### Drives
 
-| Drive | Device | Role | Status |
+| Drive | by-id | Role | Status |
 |---|---|---|---|
-| Samsung 970 EVO 500GB NVMe | nvme (OS) | Ubuntu Server 26.04 OS. Spare ~400GB use = **undecided** | OS installed (fresh reinstall) |
-| Inland 1TB NVMe | nvme (2nd) | `/var/lib/docker` — all images, containers, volumes | Not yet set up |
-| WD Red 4TB #1 | source | Plex media **source** (exFAT, copied from old build) | READ-ONLY until verified |
-| WD Red 4TB #2 | dest | Plex media destination (ext4) → `/mnt/media`; had 3,343 UDMA CRC errors last build (usually cabling) | Verify checksums + recheck SMART |
-| WD Black 2TB | — | Frigate recordings → `/mnt/frigate` | Needs format (ext4) |
-| WD Blue 4TB (SMR) | — | TBD — caused ata4 SATA errors last build; candidate for retirement | Health-check, then decide |
+| Samsung 970 EVO 500GB NVMe | nvme-Samsung_SSD_970_EVO_500GB_S466NX0KA14327N | Ubuntu OS. Spare ~400GB use = **undecided** | OS installed |
+| Inland 1TB NVMe | nvme-Inland_QN450_NVMe_SSD_IB26AC1000P03985 | `/var/lib/docker` (ext4 "docker", UUID 4cea74ce-20a4-4969-a3be-fff04e7ac4dd) | DONE, mounted, boot-verified |
+| WD Red 4TB (source) | ata-WDC_WD40EFZX-68AWUN0_WD-WX32D124UYHS | Plex media SOURCE (exFAT "plex") | READ-ONLY until verified. NOT in fstab (manual ro mount only) |
+| WD Red 4TB (dest) | ata-WDC_WD40EFZX-68AWUN0_WD-WX62D12CCFRX | Plex media → `/mnt/media` (ext4) | Mounted. Holds dvr+music+videos. CRC baseline 3343 (stable) |
+| WD Black 2TB | ata-WDC_WD2003FZEX-00SRLA0_WD-WMC6N0P1DV7X | Frigate recordings → `/mnt/frigate` (ext4 "frigate") | DONE, mounted, boot-verified |
+| WD Blue 4TB (SMR) | — | TBD — prior ata4 errors; retirement candidate | PHYSICALLY PULLED — diagnose later |
 
 **Post-verification note:** once checksums pass, source Red is freed up. Its next role (OneDrive/cloud backup target `/mnt/backup`) requires reformatting exFAT → ext4 — only after verification passes and only with explicit confirmation.
 
 ## Open Decisions
 
-1. **Samsung 500GB spare space (~400GB).** Candidates: Immich originals (`/mnt/photos`), Immich Postgres + ML cache, nothing (keep OS drive clean). Decide before Phase 6. Tradeoff notes: photos on OS drive means OS reinstalls require care; but it's the only fast storage not otherwise allocated, and the old library fit in 500GB SATA.
-2. **Old Immich data — CONFIRMED PRESERVED.** Crucial 500GB SATA SSD in ITX Windows PC was not reformatted; ext4 contents intact. Case stays closed — no exceptions. Copy method: **WSL2 `wsl --mount`** (first-party ext4 support in Win11): elevated PowerShell → `wsl --mount \\.\PHYSICALDRIVEn --partition 1 --type ext4` (find n via `Get-Disk`), then rsync/scp from inside WSL2 directly to server01 over network. `wsl --unmount` when done. Deferred until Phase 6 — PC not readily accessible. pg_dump: while mounted, check the SSD's old `/mnt/backup/migration` path (≤1 min); restore if found, else fresh DB with re-imported originals.
-3. **WD Blue fate.** SMART long test when convenient. SMR + prior SATA errors = likely retire. No role assigned until it proves itself.
-4. **Plex claim/identity.** Fresh Plex server identity vs. attempting to preserve old server ID — decide at Phase 4 (fresh is simpler; watch history is lost either way unless DB was backed up).
+1. **Samsung 500GB spare space (~400GB).** Candidates: Immich originals (`/mnt/photos`), Immich Postgres + ML cache, nothing (keep OS drive clean). Decide before Phase 6. Photos on OS drive means OS reinstalls need care, but it's the only fast storage unallocated and the old library fit in 500GB.
+2. **Old Immich data — CONFIRMED PRESERVED.** Crucial 500GB SATA SSD in ITX Windows PC not reformatted; ext4 intact. Case stays closed. Copy method: **WSL2 `wsl --mount`** (elevated PowerShell → `wsl --mount \\.\PHYSICALDRIVEn --partition 1 --type ext4`, find n via `Get-Disk`), then rsync from WSL2 to server01. `wsl --unmount` after. Deferred to Phase 6 — PC not readily accessible. Check SSD's old `/mnt/backup/migration` for pg_dump while mounted; restore if found else fresh DB.
+3. **WD Blue fate.** SMART long test when convenient. SMR + prior SATA errors = likely retire. Currently pulled from case.
+4. **Plex claim/identity.** Fresh identity vs. preserve old server ID — decide at Phase 4 (fresh is simpler; watch history lost either way unless DB backed up).
 
 ## Phases
 
-Work top to bottom. Don't skip ahead past an unresolved blocker.
+### Phase 0 — Baseline & safety — COMPLETE
+- [x] SSH access, IP 192.168.8.8, hostname server01
+- [x] apt full-upgrade + autoremove, reboot
+- [x] Drive inventory + by-id mapping (recorded in Drives table)
+- [x] SMART baselines — all PASSED, zero reallocated/pending. dest Red CRC = 3343
+- [x] WiFi + Bluetooth soft-blocked via rfkill (persists reboots)
 
-### Phase 0 — Baseline & safety
-- [ ] Confirm SSH access, IP = 192.168.8.8, hostname set
-- [ ] `apt update && apt full-upgrade`, reboot
-- [ ] Inventory drives: `ls -l /dev/disk/by-id/`, `lsblk -o NAME,SIZE,FSTYPE,LABEL,MODEL,SERIAL` — record which by-id = which role in this doc
-- [ ] SMART baseline on all drives (`smartctl -a`), note UDMA CRC counts (esp. dest Red)
-- [ ] Confirm source Red is not mounted rw anywhere
+### Phase 1 — Storage layout — COMPLETE
+- [x] Mount points /mnt/media, /mnt/frigate created
+- [x] WD Black formatted ext4 "frigate" → /mnt/frigate
+- [x] dest Red → /mnt/media (ext4)
+- [x] Inland → /var/lib/docker (ext4), fstab by-id nofail
+- [x] Docker mount-guard: docker.service.d/require-mount.conf RequiresMountsFor=/var/lib/docker
+- [x] fstab all by-id + nofail; boot-tested (all mounts survived, docker active)
+- [ ] /mnt/backup — deferred until source Red freed after Phase 2
 
-### Phase 1 — Storage layout
-- [ ] Create mount points: `/mnt/media`, `/mnt/frigate`, `/mnt/backup` (later), `/mnt/photos` (if decided)
-- [ ] Format WD Black ext4
-- [ ] fstab entries by-id with `nofail`; `systemctl daemon-reload`; `mount -a`; reboot test
-- [ ] Inland 1TB: format ext4, mount, relocate `/var/lib/docker` to it (configure before or immediately after Docker install — daemon.json `data-root` or mount at `/var/lib/docker`)
+### Phase 2 — Plex data verification — IN PROGRESS (open loop)
+- [x] Source Red mounted read-only
+- [x] music + videos rsynced source→dest (322GB, verified transfer complete)
+- [ ] **RUNNING: xxh128 manifest compare (music+videos+dvr), source vs dest**
+- [ ] Recheck dest Red CRC after — expect 3343 (bad-cable theory confirmed if stable)
+- [ ] `sudo chown -R ian:ian /mnt/media` after verify (dvr is root-owned from old copy)
+- [ ] On pass: source Red released → future /mnt/backup (reformat only with explicit go-ahead)
 
-### Phase 2 — Plex data verification
-- [ ] Mount source Red read-only
-- [ ] Checksum compare source vs dest Red (run in tmux; xxh128 or md5 manifest both sides)
-- [ ] Recheck dest Red UDMA CRC count — if it grew since baseline, replace/reseat SATA cable before trusting the drive
-- [ ] On pass: source Red released → future `/mnt/backup` (reformat only with explicit go-ahead)
-- [ ] On fail: re-copy failed files from source, re-verify
+### Phase 3 — Docker foundation — COMPLETE
+- [x] NVIDIA driver 580-server, nvidia-smi verified
+- [x] Docker Engine 29.6.1 (official repo), compose plugin, data-root on Inland
+- [x] Container Toolkit 1.19.1, runtime configured, GPU-in-container smoke test passed
+- [x] Compose layout /opt/stacks/<service>/ established
+- [x] ian added to docker group
 
-### Phase 3 — Docker foundation
-- [ ] Install NVIDIA driver (server/headless) + verify `nvidia-smi`
-- [ ] Install Docker Engine (official repo) + compose plugin
-- [ ] Confirm `data-root` on Inland 1TB
-- [ ] Install NVIDIA Container Toolkit; test GPU in container (`docker run --rm --gpus all nvidia/cuda:*-base nvidia-smi`)
-- [ ] Compose layout: one directory per stack (e.g. `/opt/stacks/plex`, `/opt/stacks/frigate`, …), each with its own `compose.yaml`
-
-### Phase 4 — Plex (Docker)
-- [ ] Compose stack with NVENC device access, `/mnt/media` bind mount (read-only into container), config volume on Inland NVMe
+### Phase 4 — Plex (Docker) — STAGED, not launched
+- [x] compose.yaml written at /opt/stacks/plex/ (lscr.io/linuxserver/plex, host net, NVENC caps video,compute,utility, /mnt/media ro, tmpfs transcode, config bind mount)
+- [ ] Waiting on: Phase 2 verify done + PLEX_CLAIM token from plex.tv/claim (4-min expiry) at launch
 - [ ] Claim server, verify library scan, verify HW transcode
-- [ ] Confirm remote/LAN access works (the old browser-timeout issue — diagnose UFW/port binding fresh if it recurs)
+- [ ] Confirm LAN access (old browser-timeout issue — diagnose fresh if recurs)
 
 ### Phase 5 — Frigate (Docker)
-- [ ] Compose stack: TensorRT detector, NVENC, `/mnt/frigate` for recordings, shm sizing
-- [ ] Reolink E1 Zoom config (HEVC 4K/20fps main, H.264 640×360/10fps sub, RTSP direct)
+- [ ] Compose stack: TensorRT detector, NVENC, /mnt/frigate recordings, shm sizing
+- [ ] Reolink E1 Zoom (HEVC 4K/20fps main, H.264 640×360/10fps sub, RTSP direct)
 - [ ] MQTT to HA Green with dedicated `frigate` user
 - [ ] Re-point HA Frigate integration to http://192.168.8.8:8971
 - [ ] (Later) Amcrest floodlight cam — driveway; H264 main, reduced substream
 
 ### Phase 6 — Immich
-- [ ] Resolve Open Decision 1 (photo storage location on server01)
-- [ ] ITX: install WSL2 if not present; `wsl --mount` the Crucial SSD (see Decision 2); rsync originals → server01; check for pg_dump while mounted; `wsl --unmount`
+- [ ] Resolve Decision 1 (photo storage location)
+- [ ] ITX: WSL2 `wsl --mount` Crucial SSD, rsync originals → server01, check pg_dump, unmount
 - [ ] Compose stack; originals at decided location; DB on fast storage
-- [ ] Restore pg_dump if found, else fresh library + re-import originals
+- [ ] Restore pg_dump if found, else fresh library + re-import
 
-### Phase 7 — Mealie + rclone
-- [ ] Mealie compose stack
-- [ ] rclone OneDrive sync to `/mnt/backup`: systemd `Type=oneshot`, no `Restart=`, `RequiresMountsFor=/mnt/backup`, exclude `/Personal Vault/**`, timer-driven
+### Phase 7 — rclone (Mealie already done)
+- [x] Mealie compose stack LIVE (see Services / Session Log 07-08)
+- [ ] rclone OneDrive → /mnt/backup: systemd Type=oneshot, no Restart=, RequiresMountsFor=/mnt/backup, exclude /Personal Vault/**, timer-driven
 
 ### Phase 8 — Monitoring & UPS
-- [ ] node_exporter (:9100) + smartctl_exporter (:9633) for RPi5 Prometheus scrape
-- [ ] NUT: RPi5 = server (USB cable), server01 = netclient with early shutdown; HA Green/Brume ride out battery
-- [ ] MikroTik CSS610 config backup (outstanding loose end)
+- [ ] node_exporter (:9100) + smartctl_exporter (:9633) for RPi5 Prometheus scrape (targets = 192.168.8.8)
+- [ ] NUT: RPi5 = server (USB cable), server01 = netclient early shutdown
+- [ ] MikroTik CSS610 config backup (loose end)
 
 ### Phase 9 — Cleanup & hardening
-- [ ] WD Blue decision executed (retire or archive role)
-- [ ] UFW rules reviewed and documented here
-- [ ] Unattended-upgrades configured
-- [ ] Document final fstab + compose tree in this file
+- [ ] WD Blue decision executed
+- [ ] UFW baseline (SSH + service ports) — NOT YET configured; nothing firewalled currently
+- [ ] Unattended-upgrades
+- [ ] Media library cleanup: (copy N) duplicate DVR files + macOS cruft (.DS_Store, AlbumArt_*.jpg) — cosmetic, dedupe before/after Plex scan
+- [ ] Document final fstab + compose tree here
+
+## Live Services
+
+- **Mealie** — http://192.168.8.8:9925 — /opt/stacks/mealie/ — mealie v3.20.1 + postgres:17, bind mounts (data + pgdata), ALLOW_SIGNUP=false. Creds in Proton Pass ("Mealie – Postgres DB" + "Mealie – Web Admin", separate entries, currently same value).
 
 ## Session Log
 
-Append one line per working session: date — what changed — next step.
+- 2026-07-06 — Plan created. Ubuntu reinstalled fresh.
+- 2026-07-07 — Confirmed Crucial SSD ext4 intact (WSL2 copy method set). veracrypt/pers_container (100GiB) copied to microSD + xxh128 VERIFIED (7cdf603e827ae26b7a6dbe4775ba820d), card pulled/labeled. Black wiped → ext4 /mnt/frigate. dest Red → /mnt/media. Inland → /var/lib/docker. All fstab by-id+nofail, boot-tested (NVMe letters swapped, by-id held). Docker 29.6.1 + NVIDIA 580 + Container Toolkit, GPU-in-container verified. Mealie LIVE. Plex stack staged (not launched). music+videos rsynced to /mnt/media.
+- 2026-07-08 — **OPEN LOOP: media xxh128 verify running** (source vs dest, all three trees). NEXT: confirm manifests match → recheck sdb CRC (expect 3343) → chown /mnt/media to ian → then launch Plex (grab claim token) or build Frigate.
 
-- 2026-07-06 — Plan created. Ubuntu reinstalled fresh. Next: Phase 0 baseline.
-
-## Reminder! 
-
-The IP address was already reserved based on hardware and retained. Ethernet is .8 and wifi is .7. Ethernet will be the primary connection. We'll turn wifi off but have it there just in case. 
-
-### Session Log — 2026-07-07 (Phase 0)
-- Confirmed network: eno1 (MAC 30:9c:23:d5:68:f8) DHCP → 192.168.8.8 reservation on Brume. Netplan is DHCP + MAC-match, wifis:{} empty.
-- WiFi + Bluetooth radios soft-blocked via rfkill (persists across reboots). wlp36s0 has no netplan config.
-- System fully updated (apt full-upgrade + autoremove), rebooted clean.
-- Drive inventory + by-id mapping recorded:
-  - sda source Red (exFAT "plex", READ-ONLY): ata-WDC_WD40EFZX-68AWUN0_WD-WX32D124UYHS
-  - sdb dest Red (ext4, media): ata-WDC_WD40EFZX-68AWUN0_WD-WX62D12CCFRX
-  - sdc Black (NTFS "storage", pending format): ata-WDC_WD2003FZEX-00SRLA0_WD-WMC6N0P1DV7X
-  - nvme0n1 Samsung 970 EVO 500GB: OS
-  - nvme1n1 Inland 1TB: blank, ready for /var/lib/docker
-- WD Blue physically pulled — parking lot, diagnose later.
-- SMART baselines (smartmontools installed): all drives PASSED, zero reallocated/pending sectors. sdb UDMA CRC = 3,343, UNCHANGED from last build → supports old-cable theory. Recheck after Phase 2 checksum reads.
-- Found ~150GB Windows-era data on the Black before formatting: veracrypt/pers_container (100GiB, backed up elsewhere), OneDrive verification staging, desktop dump.
-- 128GB microSD (sde) formatted GPT+exFAT "VCBACKUP"; rsync of pers_container running in tmux session "copy".
-
-### Open Items (next session)
-1. Check tmux "copy": `tmux attach -t copy` — confirm rsync completed without errors.
-2. Verify copy: `sudo xxh128sum /mnt/tmp-peek/veracrypt/pers_container /mnt/sdcard/pers_container` — hashes must match before the Black is touched.
-3. Eject card cleanly: `sudo umount /mnt/sdcard` (exFAT + yank = corruption risk), pull card, label it.
-4. Unmount peek: `sudo umount /mnt/tmp-peek`.
-5. DECISION GATE: confirm nothing else on the Black is needed ($RECYCLE.BIN 100GB, OneDrive staging ~50GB were deemed junk — last chance).
-6. Format Black ext4 for Frigate (wipes sdc1+sdc2, single new partition).
-7. Begin Phase 1: create /mnt/media, /mnt/frigate mount points; format Inland 1TB ext4; fstab entries by-id with nofail; reboot test.
-8. Unresolved decisions still open: Samsung spare ~400GB use (decide before Phase 6), WD Blue fate (parked).
-
-### Notes for tomorrow
-- If rsync died mid-copy, just rerun the same command — rsync resumes/overwrites safely; the source is read-only and untouched.
-- If hashes MISMATCH: do not format anything. Delete card copy, rerun rsync, re-verify. Two mismatches in a row = suspect the card, not the Black.
-- fstab safety: after editing, `sudo mount -a` + `findmnt` to validate BEFORE rebooting — a bad fstab without nofail can hang boot on a headless box.
-- sdb CRC recheck command: `sudo smartctl -a /dev/sdb | grep CRC` — expect exactly 3343.
+### Next-session quick refs
+- Check verify status: `ls -la /tmp/*.manifest; uptime` (non-zero manifest sizes + load ~0 = done)
+- Compare: `diff /tmp/src.manifest /tmp/dst.manifest && echo MATCH || echo MISMATCH`
+- CRC recheck: `sudo smartctl -a /dev/sdb | grep CRC` (expect 3343)
+- Ownership fix: `sudo chown -R ian:ian /mnt/media`
+- Plex launch: paste fresh token into /opt/stacks/plex/compose.yaml PLEX_CLAIM, `cd /opt/stacks/plex && docker compose up -d`
