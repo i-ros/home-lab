@@ -2,7 +2,7 @@
 
 **Purpose:** Single source of truth for the server01 rebuild. Upload/paste this into any Claude session (any model tier) to restore full context. Update the Status column and Session Log as work progresses.
 
-**Last updated:** 2026-07-08
+**Last updated:** 2026-07-08 (late evening)
 
 ---
 
@@ -11,7 +11,7 @@
 server01 = 24/7 home server. Ubuntu Server 26.04, headless, SSH via Termius. All services in Docker containers via docker compose. Monitored by RPi5 (Prometheus/Grafana/NUT — separate box, not in scope here except exporters/clients on server01).
 
 Services (each its own compose stack):
-- **Plex** (NVENC transcode via RTX 2070)
+- **Plex** — LIVE (NVENC transcode via RTX 2070)
 - **Frigate** (TensorRT detection + NVENC on RTX 2070; Reolink E1 Zoom at 192.168.8.106; MQTT → Mosquitto on HA Green 192.168.8.2:1883)
 - **Immich** (fresh start + import old originals — see Open Decisions)
 - **Mealie** — LIVE
@@ -20,7 +20,7 @@ Services (each its own compose stack):
 ## Hard Rules
 
 1. **Everything runs in Docker.** No native service installs. No exceptions without a documented reason in this file.
-2. **The Plex source Red (exFAT) is READ-ONLY until checksum verification passes.** Mount `ro` or leave unmounted. Never format, never write.
+2. ~~The Plex source Red (exFAT) is READ-ONLY until checksum verification passes.~~ **RETIRED 2026-07-08 — verification passed.** Source Red remains untouched until its /mnt/backup reformat gets explicit go-ahead.
 3. **Immich does not start until photo storage location is decided and mounted** (see Open Decisions) and the old-data question is resolved.
 4. **All fstab entries use `/dev/disk/by-id/`** with `nofail` on data drives. Never `/dev/sdX` — letters shuffle between boots. (PROVEN 2026-07-08: NVMe letters swapped across a reboot; by-id held mounts to the correct physical drives.)
 5. **Architectural decisions before execution.** If a step forces an undecided choice, stop and decide first.
@@ -31,11 +31,12 @@ Services (each its own compose stack):
    - **Never commit credentials** — passwords, tokens, API keys. In committed docs, reference them generically (e.g. `POSTGRES_PASSWORD=<in password manager>`) without naming the manager or the entry title — where credentials live is itself sensitive. If compose files go in the repo, real values live in a `.gitignore`'d `.env`. Git history is permanent — a committed secret is compromised even after deletion, so the fix for a leaked secret is always to ROTATE it, not just delete the line.
    - **Local network details (private-range IPs like 192.168.x.x, MACs, hostnames) ARE fine to commit** and should be — they're meaningless outside the LAN and make the doc actually usable. Don't over-redact these; scrubbing them costs clarity for zero security gain.
    - Default posture: be specific where it's generic/local, be strict where it's a credential. When unsure whether something is repo-safe, ask — don't assume.
+10. **Long-running jobs go in tmux, always** — with stderr captured to a file and output paths on persistent storage (not /tmp) if they must survive a reboot. Verify-workflow gotchas learned 2026-07-08: `./` prefix must be stripped identically on both manifests; both `comm`/`sort` inputs need `LC_ALL=C`; `comm` compares whole lines, so hash+path both must match.
 
 ## Hardware
 
 - **CPU/board:** Ryzen 7 2700X on MSI X470 (stable BIOS flashed)
-- **GPU:** RTX 2070 — driver 580-server (580.159.03, CUDA 13.0), Container Toolkit 1.19.1. Verified GPU-in-container working.
+- **GPU:** RTX 2070 — driver 580-server (580.159.03, CUDA 13.0), Container Toolkit 1.19.1. Verified GPU-in-container working; Plex sees the 2070 by name in transcoder dropdown.
 - **Network:** eno1 (MAC 30:9c:23:d5:68:f8) → 192.168.8.8 (ethernet, primary) reserved on Brume 3. 192.168.8.7 = wifi (disabled, break-glass only). DHCP + MAC-match in netplan.
 - **UPS:** CyberPower CP1500PFCLCD. USB data cable will run to **RPi5** (NUT server); server01 = NUT netclient. Cable not yet connected — low priority.
 
@@ -45,19 +46,17 @@ Services (each its own compose stack):
 |---|---|---|---|
 | Samsung 970 EVO 500GB NVMe | nvme-Samsung_SSD_970_EVO_500GB_S466NX0KA14327N | Ubuntu OS. Spare ~400GB use = **undecided** | OS installed |
 | Inland 1TB NVMe | nvme-Inland_QN450_NVMe_SSD_IB26AC1000P03985 | `/var/lib/docker` (ext4 "docker", UUID 4cea74ce-20a4-4969-a3be-fff04e7ac4dd) | DONE, mounted, boot-verified |
-| WD Red 4TB (source) | ata-WDC_WD40EFZX-68AWUN0_WD-WX32D124UYHS | Plex media SOURCE (exFAT "plex") | READ-ONLY until verified. NOT in fstab (manual ro mount only) |
-| WD Red 4TB (dest) | ata-WDC_WD40EFZX-68AWUN0_WD-WX62D12CCFRX | Plex media → `/mnt/media` (ext4) | Mounted. Holds dvr+music+videos. CRC baseline 3343 (stable) |
+| WD Red 4TB (source) | ata-WDC_WD40EFZX-68AWUN0_WD-WX32D124UYHS | VERIFIED CLEAN — released. Future: /mnt/backup (reformat pending explicit go-ahead) | Idle, still exFAT |
+| WD Red 4TB (dest) | ata-WDC_WD40EFZX-68AWUN0_WD-WX62D12CCFRX | Plex media → `/mnt/media` (ext4) | LIVE under Plex. dvr+music+videos, owned ian:ian. CRC 3343 confirmed stable |
 | WD Black 2TB | ata-WDC_WD2003FZEX-00SRLA0_WD-WMC6N0P1DV7X | Frigate recordings → `/mnt/frigate` (ext4 "frigate") | DONE, mounted, boot-verified |
 | WD Blue 4TB (SMR) | — | TBD — prior ata4 errors; retirement candidate | PHYSICALLY PULLED — diagnose later |
-
-**Post-verification note:** once checksums pass, source Red is freed up. Its next role (OneDrive/cloud backup target `/mnt/backup`) requires reformatting exFAT → ext4 — only after verification passes and only with explicit confirmation.
 
 ## Open Decisions
 
 1. **Samsung 500GB spare space (~400GB).** Candidates: Immich originals (`/mnt/photos`), Immich Postgres + ML cache, nothing (keep OS drive clean). Decide before Phase 6. Photos on OS drive means OS reinstalls need care, but it's the only fast storage unallocated and the old library fit in 500GB.
 2. **Old Immich data — CONFIRMED PRESERVED.** Crucial 500GB SATA SSD in ITX Windows PC not reformatted; ext4 intact. Case stays closed. Copy method: **WSL2 `wsl --mount`** (elevated PowerShell → `wsl --mount \\.\PHYSICALDRIVEn --partition 1 --type ext4`, find n via `Get-Disk`), then rsync from WSL2 to server01. `wsl --unmount` after. Deferred to Phase 6 — PC not readily accessible. Check SSD's old `/mnt/backup/migration` for pg_dump while mounted; restore if found else fresh DB.
 3. **WD Blue fate.** SMART long test when convenient. SMR + prior SATA errors = likely retire. Currently pulled from case.
-4. **Plex claim/identity.** Fresh identity vs. preserve old server ID — decide at Phase 4 (fresh is simpler; watch history lost either way unless DB backed up).
+4. **Plex identity — RESOLVED 2026-07-08: fresh identity, claimed.** Old watch history not migrated.
 
 ## Phases
 
@@ -75,15 +74,15 @@ Services (each its own compose stack):
 - [x] Inland → /var/lib/docker (ext4), fstab by-id nofail
 - [x] Docker mount-guard: docker.service.d/require-mount.conf RequiresMountsFor=/var/lib/docker
 - [x] fstab all by-id + nofail; boot-tested (all mounts survived, docker active)
-- [ ] /mnt/backup — deferred until source Red freed after Phase 2
+- [ ] /mnt/backup — deferred until source Red reformat go-ahead
 
-### Phase 2 — Plex data verification — IN PROGRESS (open loop)
+### Phase 2 — Plex data verification — COMPLETE (2026-07-08)
 - [x] Source Red mounted read-only
-- [x] music + videos rsynced source→dest (322GB, verified transfer complete)
-- [ ] **RUNNING: xxh128 manifest compare (music+videos+dvr), source vs dest**
-- [ ] Recheck dest Red CRC after — expect 3343 (bad-cable theory confirmed if stable)
-- [ ] `sudo chown -R ian:ian /mnt/media` after verify (dvr is root-owned from old copy)
-- [ ] On pass: source Red released → future /mnt/backup (reformat only with explicit go-ahead)
+- [x] music + videos rsynced source→dest (322GB)
+- [x] Manifest compare PASSED — md5 (not xxh128 as originally planned): full fresh source re-hash vs dst.manifest via comm, LC_ALL=C, zero mismatches
+- [x] Dest Red CRC rechecked — 3343, unchanged through rsync + two full drive re-hashes. Bad-cable theory CONFIRMED; drive healthy
+- [x] chown -R ian:ian /mnt/media
+- [x] Source Red released (reformat to /mnt/backup still requires explicit go-ahead)
 
 ### Phase 3 — Docker foundation — COMPLETE
 - [x] NVIDIA driver 580-server, nvidia-smi verified
@@ -92,11 +91,14 @@ Services (each its own compose stack):
 - [x] Compose layout /opt/stacks/<service>/ established
 - [x] ian added to docker group
 
-### Phase 4 — Plex (Docker) — STAGED, not launched
-- [x] compose.yaml written at /opt/stacks/plex/ (lscr.io/linuxserver/plex, host net, NVENC caps video,compute,utility, /mnt/media ro, tmpfs transcode, config bind mount)
-- [ ] Waiting on: Phase 2 verify done + PLEX_CLAIM token from plex.tv/claim (4-min expiry) at launch
-- [ ] Claim server, verify library scan, verify HW transcode
-- [ ] Confirm LAN access (old browser-timeout issue — diagnose fresh if recurs)
+### Phase 4 — Plex (Docker) — LIVE (2026-07-08)
+- [x] compose.yaml at /opt/stacks/plex/ (lscr.io/linuxserver/plex, host net, NVENC caps video,compute,utility, /mnt/media ro, tmpfs transcode, config bind mount)
+- [x] Launched + claimed successfully (fresh identity — Decision 4 resolved)
+- [x] Libraries added: /media/music, /media/videos, /media/dvr — initial scan/metadata run in progress
+- [x] LAN access confirmed via http://192.168.8.8:32400/web — no timeout recurrence
+- [x] Transcoder temp dir = /transcode (tmpfs); HW accel on; transcoding device pinned to RTX 2070 (explicit over Automatic — GPU failure should be loud, not silent CPU fallback)
+- [x] External access DISABLED — deliberate. Remote Plex via Tailscale is the future path; revisit at a later date
+- [ ] Verify HW transcode: force a transcode, confirm "(hw)" in dashboard (formality — dropdown already shows the 2070)
 
 ### Phase 5 — Frigate (Docker)
 - [ ] Compose stack: TensorRT detector, NVENC, /mnt/frigate recordings, shm sizing
@@ -125,25 +127,26 @@ Services (each its own compose stack):
 - [ ] WD Blue decision executed
 - [ ] UFW baseline (SSH + service ports) — NOT YET configured; nothing firewalled currently
 - [ ] Unattended-upgrades
-- [ ] Media library cleanup: (copy N) duplicate DVR files + macOS cruft (.DS_Store, AlbumArt_*.jpg) — cosmetic, dedupe before/after Plex scan
+- [ ] Media library cleanup: (copy N) duplicate DVR files + macOS cruft (.DS_Store, AlbumArt_*.jpg) — cosmetic. Verify confirmed dest carries benign extras (dupe-hash art files, "* 2.mp3" suffixes, (copy N) DVR) — dedupe at leisure, after Plex scan settles
+- [ ] Plex external/remote access — currently DISABLED by design. Future: Tailscale-based remote access, no port forwarding. Design at a future session
 - [ ] Document final fstab + compose tree here
 
 ## Live Services
 
 - **Mealie** — http://192.168.8.8:9925 — /opt/stacks/mealie/ — mealie v3.20.1 + postgres:17, bind mounts (data + pgdata), ALLOW_SIGNUP=false. Credentials stored in password manager (DB + web admin, separate entries).
+- **Plex** — http://192.168.8.8:32400/web — /opt/stacks/plex/ — lscr.io/linuxserver/plex, host net, NVENC (RTX 2070, pinned), /mnt/media ro, tmpfs /transcode. Claimed, fresh identity. External access OFF.
 
 ## Session Log
 
 - 2026-07-06 — Plan created. Ubuntu reinstalled fresh.
 - 2026-07-07 — Confirmed Crucial SSD ext4 intact (WSL2 copy method set). veracrypt/pers_container (100GiB) copied to microSD + xxh128 VERIFIED (7cdf603e827ae26b7a6dbe4775ba820d), card pulled/labeled. Black wiped → ext4 /mnt/frigate. dest Red → /mnt/media. Inland → /var/lib/docker. All fstab by-id+nofail, boot-tested (NVMe letters swapped, by-id held). Docker 29.6.1 + NVIDIA 580 + Container Toolkit, GPU-in-container verified. Mealie LIVE. Plex stack staged (not launched). music+videos rsynced to /mnt/media.
-- 2026-07-08 — **OPEN LOOP: media xxh128 verify still running** (source read slow; src.manifest 0 bytes, load ~1.0 = still grinding). NEXT: confirm manifests match → recheck sdb CRC (expect 3343) → chown /mnt/media to ian → then launch Plex (grab claim token) or build Frigate. Added GitHub/secrets discipline (Hard Rule 9) + Mealie password rotation task (Phase 9) after realizing the Postgres password was committed to git history in an earlier doc version. Built gear-inventory skill (separate deliverable, staged for repo review pending an org strategy).
+- 2026-07-08 (day) — Manifest verify detour: dst.manifest completed (10,230 files) but initial diff/comm attempts returned confusing all-mismatch results. Root causes found one at a time: (1) src.manifest was STALE — its hashes disagreed with the live source drive itself; (2) a second full rsync ran during diagnosis (exact history murky — see training item); (3) comm needs LC_ALL=C on both inputs; (4) fresh source re-hash omitted the ./ prefix strip, false-failing again. Spot checks along the way proved live src == live dst byte-for-byte and zero missing paths.
+- 2026-07-08 (evening) — **Phase 2 CLOSED, Plex LIVE.** Definitive verify: fresh md5 re-hash of full source (./ stripped, LC_ALL=C) vs dst.manifest = ZERO mismatches. CRC 3343 stable through all of it → bad-cable confirmed, drive healthy. chown /mnt/media → ian. Plex launched, claim token worked first try, fresh identity, 3 libraries scanning, LAN access clean. Transcoder: temp dir → /transcode tmpfs, device pinned to 2070, external access OFF (deliberate; Tailscale later). Hard Rule 10 added (tmux + verify gotchas). NEXT SESSION: HW transcode "(hw)" formality check; then Frigate (Phase 5) or wherever pointed. TRAINING SESSION owed: tmux fundamentals, canonical verify workflow, iPad/Termius drills — so this class of confusion never recurs.
 
 ### Next-session quick refs
-- Check verify status: `ls -la /tmp/*.manifest; uptime` (non-zero manifest sizes + load ~0 = done)
-- Compare: `diff /tmp/src.manifest /tmp/dst.manifest && echo MATCH || echo MISMATCH`
-- CRC recheck: `sudo smartctl -a /dev/sdb | grep CRC` (expect 3343)
-- Ownership fix: `sudo chown -R ian:ian /mnt/media`
-- Plex launch: paste fresh token into /opt/stacks/plex/compose.yaml PLEX_CLAIM, `cd /opt/stacks/plex && docker compose up -d`
+- Plex HW check: play video, force lower quality, dashboard should show "(hw)"
+- Frigate is the next major build (Phase 5)
+- Canonical verify pattern (for any future copy): hash both sides identically (same ./ strip, same tool), `LC_ALL=C sort` both, `comm -23 src dst | wc -l` → 0 = clean. Always in tmux, stderr to a file.
 
 ## To-Do: Video Ingest Share (SMB on server01)
 
