@@ -195,3 +195,21 @@ Services (each its own compose stack):
 - Footage sitting in `inbox/` = at-risk/unarchived by definition
 
 **Timing:** No dependency on Immich/Phase 6.
+
+## Backlog: Network File Share + Tailscale Remote Access
+
+## Random updates - to incorporate into doc with future update.
+### General SMB share (LAN)
+- Goal: native file access for iPad + other devices via Files → Connect to Server (smb://192.168.8.8)
+- Samba container on server01 (Docker per hard rule; rclone stays the only exception)
+- Share dir under /srv or /mnt/media subset; decide read-only vs read-write per share
+- Per-user creds (no guest), store in Proton Pass
+- Replaces the dead Proton Drive Files path — Proton dropped iOS Files integration in the
+  current SDK build (confirmed via dev response; re-add is "future version," no ETA)
+
+### Tailscale (remote access validation)
+- Trigger: stack getting more valuable, want verified remote reach before relying on it
+- Add iPad to existing tailnet; confirm MagicDNS name for server01 resolves
+- Test SMB share over Tailscale (Connect to Server via tailnet IP / MagicDNS, not LAN IP)
+- WireGuard handles the encryption leg, so SMB-over-WAN is safe through the tailnet
+- Confirm Plex remote path here too (external access still disabled = Tailscale is the plan)
