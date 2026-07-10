@@ -2,7 +2,9 @@
 
 **Purpose:** Single source of truth for the server01 rebuild. Upload/paste this into any Claude session (any model tier) to restore full context. Update the Status column and Session Log as work progresses.
 
-**Last updated:** 2026-07-09 (early AM)
+**Companion docs:** Per-service detail lives in its own doc in this repo (compose + config also committed per stack). Current companions: `frigate.md` (camera/NVR solution). Plex/Mealie companion docs to be retrofitted.
+
+**Last updated:** 2026-07-09 (evening)
 
 ---
 
@@ -12,7 +14,7 @@ server01 = 24/7 home server. Ubuntu Server 26.04, headless, SSH via Termius. All
 
 Services (each its own compose stack):
 - **Plex** — LIVE (NVENC transcode via RTX 2070, HW confirmed)
-- **Frigate** (TensorRT detection + NVENC on RTX 2070; Reolink E1 Zoom at 192.168.8.106; MQTT → Mosquitto on HA Green 192.168.8.2:1883)
+- **Frigate** — IN PROGRESS (ONNX detector, TensorRT-accelerated, on RTX 2070; Reolink E1 Zoom at 192.168.8.106; MQTT → Mosquitto on HA Green 192.168.8.2:1883). Full detail in `frigate.md`.
 - **Immich** (fresh start + import old originals — see Open Decisions)
 - **Mealie** — LIVE
 - **rclone** — OneDrive backup (host service, not a container — see Hard Rule 1). Remote authed, initial sync running.
@@ -37,7 +39,7 @@ Services (each its own compose stack):
 ## Hardware
 
 - **CPU/board:** Ryzen 7 2700X on MSI X470 (stable BIOS flashed). Note: subjectively snappier than the retired ITX/265K build — not the silicon (265K is faster on paper) but the plumbing: media now on direct SATA instead of USB-C enclosure, Docker root on Gen4 NVMe, fresh minimal install, less service contention. The design decisions bought this.
-- **GPU:** RTX 2070 — driver 580-server (580.159.03, CUDA 13.0), Container Toolkit 1.19.1. GPU-in-container verified; Plex sees the 2070 by name in transcoder dropdown; **HW transcode confirmed live ("(hw)" in dashboard) 07-09.**
+- **GPU:** RTX 2070 — driver 580-server (580.159.03, CUDA 13.0), Container Toolkit 1.19.1. GPU-in-container verified; Plex sees the 2070 by name in transcoder dropdown; **HW transcode confirmed live ("(hw)" in dashboard) 07-09.** Shared between Plex (NVENC transcode) and Frigate (NVDEC decode + ONNX inference) — fine for now; watch 8GB VRAM as cameras grow.
 - **Network:** eno1 (MAC 30:9c:23:d5:68:f8) → 192.168.8.8 (ethernet, primary) reserved on Brume 3. 192.168.8.7 = wifi (disabled, break-glass only). DHCP + MAC-match in netplan.
 - **UPS:** CyberPower CP1500PFCLCD. USB data cable will run to **RPi5** (NUT server); server01 = NUT netclient. Cable not yet connected — low priority.
 
@@ -103,12 +105,16 @@ Services (each its own compose stack):
 - [x] External access DISABLED — deliberate. Remote Plex via Tailscale is the future path; revisit at a later date
 - [x] **HW transcode VERIFIED — "(hw)" confirmed in dashboard 07-09.** Phase fully closed.
 
-### Phase 5 — Frigate (Docker) — NEXT MAJOR BUILD
-- [ ] Compose stack: TensorRT detector, NVENC, /mnt/frigate recordings, shm sizing
-- [ ] Reolink E1 Zoom (HEVC 4K/20fps main, H.264 640×360/10fps sub, RTSP direct)
-- [ ] MQTT to HA Green with dedicated `frigate` user
+### Phase 5 — Frigate (Docker) — IN PROGRESS (full detail in companion doc `frigate.md`)
+
+**Detector correction:** the detector is **ONNX (TensorRT-accelerated)**, NOT the old `tensorrt` detector type — that standalone type was **removed for desktop Nvidia GPUs in 0.16+**. Current path = image `0.17.2-tensorrt` (ships TensorRT libs) + `type: onnx` detector + YOLOv9-s @ 320 model (manual ONNX export — Nvidia does NOT auto-download models). This supersedes the original "TensorRT detector" plan wording.
+
+- [x] Stack files authored + pushed to repo: `compose.yaml`, `config/config.yml`, `env.example` (template; real `.env` is local-only, gitignored)
+- [x] **E1 Zoom streams ffprobe-VERIFIED (2026-07-09):** main `h264Preview_01_main` = **HEVC 3840×2160 + AAC**; sub `h264Preview_01_sub` = **H.264 640×360 + AAC**; login `admin`. (Gotcha: the `h264Preview`-prefixed main path actually carries H.265 — Reolink's stream name lies about the codec. There is no `h265Preview_` path.)
+- [x] MQTT `frigate` user confirmed present in Mosquitto add-on config (password in password manager)
+- [ ] Run the bring-up runbook (`frigate.md`): create `/opt/stacks/frigate` + `config/model_cache` → create `.env` from `env.example` (chmod 600) → export YOLOv9-s ONNX (docker build, in tmux) → `docker compose up -d` → watch logs for TensorRT engine build + go2rtc connect + MQTT + the one-time admin password → verify a person event
 - [ ] Re-point HA Frigate integration to http://192.168.8.8:8971
-- [ ] (Later) Amcrest floodlight cam — driveway; H264 main, reduced substream
+- [ ] (Later) Amcrest floodlight cam — driveway. NOTE: Dahua-lineage RTSP (`/cam/realmonitor?channel=1&subtype=0` main, `subtype=1` sub) — NOT Reolink path syntax.
 
 ### Phase 6 — Immich — ON HOLD (Decision 1 gates it)
 - [ ] Resolve Decision 1 (photo storage location)
@@ -144,6 +150,7 @@ Services (each its own compose stack):
 
 - **Mealie** — http://192.168.8.8:9925 — /opt/stacks/mealie/ — mealie v3.20.1 + postgres:17, bind mounts (data + pgdata), ALLOW_SIGNUP=false. Credentials stored in password manager (DB + web admin, separate entries).
 - **Plex** — http://192.168.8.8:32400/web — /opt/stacks/plex/ — lscr.io/linuxserver/plex, host net, NVENC (RTX 2070, pinned, HW confirmed), /mnt/media ro, tmpfs /transcode. Claimed, fresh identity. External access OFF.
+- **Frigate** — (bring-up pending) — /opt/stacks/frigate/ — 0.17.2-tensorrt image, ONNX detector, go2rtc restream, recordings → /mnt/frigate. UI will be at http://192.168.8.8:8971 (authenticated). Full detail + runbook in `frigate.md`.
 - **rclone (host service, not a container)** — remote `onedrive` → `/mnt/backup`. Config `~/.config/rclone/rclone.conf` (NOT committed — holds refresh token). Drive = OneDrive personal `2A77BE67D195BC46`. Initial `copy` sync in progress; systemd timer to follow.
 
 ## Session Log
@@ -153,11 +160,12 @@ Services (each its own compose stack):
 - 2026-07-08 (day) — Manifest verify detour: dst.manifest completed (10,230 files) but initial diff/comm attempts returned confusing all-mismatch results. Root causes found one at a time: (1) src.manifest was STALE — its hashes disagreed with the live source drive itself; (2) a second full rsync ran during diagnosis (exact history murky — see training item); (3) comm needs LC_ALL=C on both inputs; (4) fresh source re-hash omitted the ./ prefix strip, false-failing again. Spot checks along the way proved live src == live dst byte-for-byte and zero missing paths.
 - 2026-07-08 (evening) — **Phase 2 CLOSED, Plex LIVE.** Definitive verify: fresh md5 re-hash of full source (./ stripped, LC_ALL=C) vs dst.manifest = ZERO mismatches. CRC 3343 stable through all of it → bad-cable confirmed, drive healthy. chown /mnt/media → ian. Plex launched, claim token worked first try, fresh identity, 3 libraries scanning, LAN access clean. Transcoder: temp dir → /transcode tmpfs, device pinned to 2070, external access OFF (deliberate; Tailscale later). Hard Rule 10 added (tmux + verify gotchas).
 - 2026-07-09 (early AM) — **Backup drive live + OneDrive backup stood up.** HW transcode "(hw)" confirmed → Phase 4 fully closed; Plex initial scan finished. Gave go-ahead to reformat source Red (WX32D124UYHS): exFAT→ext4 "backup", UUID 43a16c87..., /mnt/backup, fstab by-UUID+nofail, chown ian. Hard Rule 2 fully retired. Preventative reboot to validate the new fstab line under real boot — passed; **NVMe letters swapped a 2nd time (docker root nvme1n1→nvme0n1), UUID/by-id held everything** (Hard Rule 4 reinforced). rclone v1.74.4 installed via official script (rejected snap + apt 1.60). OneDrive remote authed after a couple of false starts (wizard/authorize run on wrong machine first; clean redo with token-paste worked). Chose `copy` over `sync` (documented in Phase 7 + Hard Rule 1 rclone exception). Initial full-drive `copy` launched in tmux `onedrive`, Personal Vault excluded, logging to ~/rclone-onedrive-initial.log. **STOPPED FOR THE NIGHT — done until OneDrive initial sync completes.**
+- 2026-07-09 (evening) — **Frigate bring-up started; split into companion doc `frigate.md`.** Confirmed current Frigate = 0.17.2. Corrected the detector approach: ONNX detector on the `-tensorrt` image (standalone TensorRT detector removed for desktop Nvidia in 0.16+); model is a manually-exported YOLOv9-s ONNX (Nvidia doesn't auto-download). Authored + pushed `compose.yaml`, `config.yml`, `env.example`. **ffprobe-verified E1 Zoom streams before launch:** main `h264Preview_01_main` = HEVC 4K + AAC, sub `h264Preview_01_sub` = H.264 640×360 + AAC, login `admin` — corrected config (main path was assumed `h265Preview`; the h264-prefixed path actually carries HEVC). Adopted per-service companion-doc convention (compose + config in repo, secrets in `.env`, data on disk); Plex/Mealie docs to retrofit later. Stopped before running the bring-up runbook. OneDrive initial sync still running (expected done shortly after midnight).
 
 ### Next-session pickup (START HERE)
 1. **Check the OneDrive initial sync.** Reattach: `tmux attach -t onedrive`. If the prompt is back (job done), review the tail of `~/rclone-onedrive-initial.log` for errors/skips. If still running, let it finish.
 2. **Once sync is clean:** build the rclone systemd oneshot + nightly timer (Phase 7 last box) — `copy`, Personal Vault exclude, `RequiresMountsFor=/mnt/backup`, no `Restart=`.
-3. **Then the next major build is Frigate (Phase 5)**, or wherever pointed.
+3. **Frigate bring-up (Phase 5)** — camera verified, files in repo. Follow the runbook in `frigate.md`: create `/opt/stacks/frigate` + `config/model_cache`, create `.env` from `env.example` (chmod 600), export YOLOv9-s ONNX (docker build, tmux), `docker compose up -d`, watch logs for engine build + go2rtc + MQTT + one-time admin password, verify a person event. Then re-point the HA integration.
 - Owed: **training session** — tmux fundamentals, canonical verify workflow, iPad/Termius drills — so the 07-08 verify confusion never recurs.
 
 ### Quick refs
@@ -166,6 +174,8 @@ Services (each its own compose stack):
 - Canonical verify pattern (for any future copy): hash both sides identically (same ./ strip, same tool), `LC_ALL=C sort` both, `comm -23 src dst | wc -l` → 0 = clean. Always in tmux, stderr to a file.
 - Plex HW check (already done): play video, force lower quality, dashboard shows "(hw)".
 - Two identical WD Reds: WX32D124UYHS = /mnt/backup, WX62D12CCFRX = /mnt/media. Resolve by serial before any drive op.
+- Frigate RTSP probe (any camera): `docker run --rm --entrypoint ffprobe linuxserver/ffmpeg -v error -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 "rtsp://USER:PASS@IP:554/PATH"`. A 401 is often a stray space or unescaped password symbol, not real auth failure.
+- E1 Zoom streams: main `h264Preview_01_main` (HEVC 4K), sub `h264Preview_01_sub` (H.264 640×360), login `admin`. Path name says h264 but main is H.265 — probe, don't trust the name.
 
 ## To-Do: Video Ingest Share (SMB on server01)
 
