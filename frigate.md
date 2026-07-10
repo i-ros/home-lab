@@ -2,7 +2,7 @@
 
 **Purpose:** Single source of truth for the Frigate NVR stack and all camera/DVR work. Companion to the server01 Master Plan (which keeps only a Phase 5 pointer). Update the camera inventory + session log as cameras and features are added.
 
-**Last updated:** 2026-07-09 (evening)
+**Last updated:** 2026-07-10
 
 ---
 
@@ -28,11 +28,13 @@
 
 ## Hardware / Camera Inventory
 
-| Camera | Model | IP | Streams | Frigate name | Status |
-|---|---|---|---|---|---|
-| Living room | Reolink E1 Zoom (PT) | 192.168.8.106 | main HEVC 3840×2160 + AAC (`h264Preview_01_main`); sub H.264 640×360 + AAC (`h264Preview_01_sub`) — paths VERIFIED via ffprobe 2026-07-09; login `admin` | `living_room` | first camera — bring-up in progress |
-| Driveway | Amcrest floodlight cam | TBD | H.264 main + reduced substream | — | acquired, not yet added |
-| (future) | Reolink doorbell + indoor | TBD | — | — | ordered |
+Learning setup, indoor-only for now — a couple of simple Reolink cameras plus a doorbell coming soon. No fixed room assignments yet, so cameras are named by hostname, not location (see Session Log 2026-07-10).
+
+| Camera | Model | Hostname | IP | Streams | Frigate name | Status |
+|---|---|---|---|---|---|---|
+| E1 Zoom | Reolink E1 Zoom (PT) | reolink-e1-zoom | 192.168.8.106 (ethernet) | main HEVC 3840×2160 + AAC (`h264Preview_01_main`); sub H.264 640×360 + AAC (`h264Preview_01_sub`) — verified via ffprobe 2026-07-09; login `admin` | `reolink_e1_zoom_eth` | previously named `living_room`; streams previously verified but config still needs updating to new name |
+| E1 Pro | Reolink E1 Pro | reolink-e1-pro | 192.168.8.103 (ethernet) | TBD — not yet probed; don't assume it matches the Zoom's paths | `reolink_e1_pro_eth` | connected, streams not yet verified |
+| Doorbell | Reolink doorbell | TBD | TBD | TBD | TBD | owned, hooking up soon |
 
 **Detector host:** server01, RTX 2070 (driver 580-server, CUDA 13.0, Container Toolkit 1.19.1).
 **MQTT broker:** Mosquitto on HA Green `192.168.8.2:1883`, service user `frigate` (defined in the Mosquitto add-on config, not an HA user account).
@@ -102,7 +104,7 @@ Watch for, in order:
 - **the auto-generated admin password** for the `8971` UI is printed once in the logs — grab it and store in Proton Pass, then log in and set your own.
 
 **4. Verify**
-- UI at `http://192.168.8.8:8971` — live view of `living_room`.
+- UI at `http://192.168.8.8:8971` — live view of each configured camera.
 - Walk in frame → a `person` event fires.
 - System Metrics page → detector inference time (expect ~10–20 ms on the 2070) and that it's the GPU, not CPU.
 
@@ -139,17 +141,19 @@ Plus ~40 MB for logs. One 640×360 camera ≈ 47 MB total — the 128 MB default
 
 ## Session Log
 
-- 2026-07-09 (evening) — Doc created. Confirmed current Frigate = 0.17.2. Established the ONNX-on-tensorrt-image approach (corrects Master Plan's "TensorRT detector"). Authored `compose.yaml`, `config.yml`, `.env.example` for the first camera (Reolink E1 Zoom, `living_room`). MQTT `frigate` user confirmed present in Mosquitto add-on config. rclone OneDrive initial sync still running (unrelated, from Master Plan) — Frigate bring-up does not depend on it. **Verified E1 Zoom streams via ffprobe:** main = `h264Preview_01_main` (HEVC 4K + AAC), sub = `h264Preview_01_sub` (H.264 640×360 + AAC), login `admin`. Corrected config (main path was assumed `h265Preview`; the h264-prefix path carries HEVC). Next: run the build runbook steps 1–4 on server01.
+- 2026-07-09 (evening) — Doc created. Confirmed current Frigate = 0.17.2. Established the ONNX-on-tensorrt-image approach (corrects Master Plan's "TensorRT detector"). Authored `compose.yaml`, `config.yml`, `.env.example` for the first camera (Reolink E1 Zoom, `living_room`). MQTT `frigate` user confirmed present in Mosquitto add-on config. rclone OneDrive initial sync still running (unrelated, from Master Plan) — Frigate bring-up does not depend on it. **Verified E1 Zoom streams via ffprobe:** main = `h264Preview_01_main` (HEVC 4K + AAC), sub = `h264Preview_01_sub` (H.264 640×360 + AAC), login `admin`. Corrected config (main path was assumed `h265Preview`; the h264-prefix path carries HEVC). Next: run the build runbook steps 1–4 on server01. (Note: bring-up was never actually run — corrected 2026-07-10.)
+- 2026-07-10 — Plan reset. The build runbook was never actually executed (no `docker compose up` yet — camera 1 bring-up had not started). Cameras have since been physically relocated; dropped location-based naming (`living_room`) in favor of hostname-style Frigate camera names since final placement isn't decided yet. Current plan: a simple indoor learning setup with two Reolink E1 cameras — **E1 Zoom** (`reolink_e1_zoom_eth`, 192.168.8.106, ethernet — same unit/IP as before, just renamed) and **E1 Pro** (`reolink_e1_pro_eth`, 192.168.8.103, ethernet — new, streams not yet probed) — plus a Reolink doorbell to be hooked up soon. The Amcrest floodlight driveway-cam plan is dropped. `figate.md` (typo'd duplicate of this doc from initial creation) removed — no content lost, `frigate.md` was already a strict superset; full history remains at commit `0c51da0`. Next: ffprobe the E1 Pro (192.168.8.103) to get its real stream paths (don't assume they match the Zoom's), then update `config.yml`/`compose.yaml` for both cameras and run the build runbook for the first time.
 
 ---
 
 ## Backlog
 
-- [ ] Create dedicated least-privilege Reolink user (web UI `http://192.168.8.106` → System → User Management → type User) and swap `admin` out of the config. Hardening — currently using admin creds directly.
-- [ ] Decide audio recording policy per camera (two-party-consent states) — currently AAC audio is captured on living_room.
-- [ ] Add driveway (Amcrest floodlight) — H.264 main + reduced substream, its own go2rtc streams + camera block.
-- [ ] Add Reolink doorbell + indoor when they arrive.
-- [ ] Per-camera zones + masks (driveway: ignore street; living room: ignore TV) — cuts false positives.
+- [ ] Create dedicated least-privilege Reolink user (web UI, per-camera → System → User Management → type User) and swap `admin` out of the config. Hardening — currently using admin creds directly.
+- [ ] Decide audio recording policy per camera (two-party-consent states) — currently AAC audio is captured on `reolink_e1_zoom_eth`.
+- [ ] ffprobe the E1 Pro (192.168.8.103) to confirm its real RTSP stream paths — do not assume they match the Zoom's.
+- [ ] Add `reolink_e1_pro_eth` camera block to `config.yml` once paths are verified — its own go2rtc streams + camera block.
+- [ ] Hook up the Reolink doorbell when ready — new go2rtc streams + camera block, plus whatever doorbell-specific config it needs (button-press event, two-way audio, etc.).
+- [ ] Per-camera zones + masks once locations are settled — cuts false positives.
 - [ ] Decide birdseye view + whether to expose it.
 - [ ] Revisit dropping port 5000 once auth + integration are settled.
 - [ ] Tune retention per camera once real disk-usage/day is observed.
