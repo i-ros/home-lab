@@ -32,9 +32,9 @@ model:
 go2rtc:
   streams:
     living_room_main:
-      - rtsp://frigate:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h265Preview_01_main
+      - rtsp://admin:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h264Preview_01_main
     living_room_sub:
-      - rtsp://frigate:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h264Preview_01_sub
+      - rtsp://admin:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h264Preview_01_sub
 
 cameras:
   living_room:
