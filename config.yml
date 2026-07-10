@@ -1,0 +1,81 @@
+# /opt/stacks/frigate/config/config.yml
+# Frigate 0.17.2 — server01. Nvidia ONNX detector (TensorRT-accelerated) + go2rtc restream.
+# {FRIGATE_*} values are substituted from the container environment (.env).
+
+mqtt:
+  enabled: true
+  host: 192.168.8.2          # HA Green (Mosquitto add-on)
+  port: 1883
+  user: frigate
+  password: "{FRIGATE_MQTT_PASSWORD}"
+  topic_prefix: frigate
+
+# --- Detector: ONNX auto-uses TensorRT on the -tensorrt image for Nvidia GPUs ---
+detectors:
+  onnx:
+    type: onnx
+
+# --- Model: YOLOv9-s @ 320. ONNX must be exported + placed at the path below BEFORE first start
+#     (Nvidia does NOT auto-download YOLO models — see frigate.md, model step).
+#     On first start Frigate compiles this ONNX into a .trt engine (takes several minutes). ---
+model:
+  model_type: yolo-generic
+  width: 320
+  height: 320
+  input_tensor: nchw
+  input_pixel_format: rgb
+  input_dtype: float
+  path: /config/model_cache/yolov9-s-320.onnx
+  labelmap_path: /labelmap/coco-80.txt
+
+# --- go2rtc: pull each camera ONCE, Frigate consumes the restream (saves camera CPU/bandwidth) ---
+go2rtc:
+  streams:
+    living_room_main:
+      - rtsp://frigate:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h265Preview_01_main
+    living_room_sub:
+      - rtsp://frigate:{FRIGATE_RTSP_PASSWORD}@192.168.8.106:554/h264Preview_01_sub
+
+cameras:
+  living_room:
+    ffmpeg:
+      hwaccel_args: preset-nvidia          # GPU decode of the detect stream
+      inputs:
+        - path: rtsp://127.0.0.1:8554/living_room_main
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+        - path: rtsp://127.0.0.1:8554/living_room_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 640           # explicit (0.17 auto-detect can hang on startup — see gotchas)
+      height: 360
+      fps: 5
+    objects:
+      track:
+        - person
+        - car
+        - dog
+        - cat
+    record:
+      enabled: true
+      retain:
+        days: 3            # continuous baseline; tune per camera
+        mode: all
+      alerts:
+        retain:
+          days: 30
+      detections:
+        retain:
+          days: 30
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+
+# --- Global recording defaults (cameras inherit unless overridden above) ---
+record:
+  enabled: true

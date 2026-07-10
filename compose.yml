@@ -1,0 +1,42 @@
+# /opt/stacks/frigate/compose.yaml
+# Frigate NVR — server01 (RTX 2070, Nvidia ONNX detector via TensorRT)
+# Secrets live in ./.env (gitignored). Never commit real MQTT/RTSP passwords.
+
+services:
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:0.17.2-tensorrt
+    restart: unless-stopped
+    stop_grace_period: 30s          # give recordings time to flush on stop
+    shm_size: "512mb"               # sized for growth — see frigate.md for the formula
+
+    env_file:
+      - .env                        # FRIGATE_MQTT_PASSWORD, FRIGATE_RTSP_PASSWORD
+
+    environment:
+      TZ: America/Denver
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility   # inference + NVDEC + nvidia-smi
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./config:/config                     # config.yml, frigate.db, model_cache (OS SSD)
+      - /mnt/frigate:/media/frigate          # recordings/snapshots -> WD Black 2TB
+
+    tmpfs:
+      - /tmp/cache:size=1000000000           # 1GB recording-segment cache, spares disk writes
+
+    ports:
+      - "8971:8971"     # authenticated UI + API  <-- HA integration points here
+      - "5000:5000"     # internal UNAUTHENTICATED UI (LAN-only convenience; drop later if desired)
+      - "8554:8554"     # go2rtc RTSP restream
+      - "8555:8555/tcp" # WebRTC (live view)
+      - "8555:8555/udp"
