@@ -37,11 +37,6 @@ Blocked on the Samsung 500GB spare-space decision (see `decisions.md` → Open D
 - [ ] Stand up the compose stack once storage location is decided; DB on fast storage.
 - [ ] Restore the `pg_dump` if one was found, else fresh library + re-import.
 
-## Backup / rclone
-
-- [ ] Check the OneDrive initial full sync: `tmux attach -t onedrive` (Ctrl-b then d to detach without stopping). If done, review `~/rclone-onedrive-initial.log` tail for errors/skips.
-- [ ] Once the initial sync is clean, wrap it as a systemd oneshot + nightly timer: `RequiresMountsFor=/mnt/backup`, no `Restart=`, reuse the `copy` (not `sync`) + `--exclude "/Personal Vault/**"` semantics from the initial run.
-
 ## Monitoring & UPS
 
 - [ ] `node_exporter` (:9100) + `smartctl_exporter` (:9633) on server01 for the RPi5 Prometheus scrape (target = 192.168.8.8).
@@ -52,10 +47,9 @@ Blocked on the Samsung 500GB spare-space decision (see `decisions.md` → Open D
 
 **Goal:** LAN landing spot for iOS-shot video (fast access for editing from other devices) and general native file access for iPad/other devices. Working area only — nothing under it is backed up; keepers go through the OneDrive/Immich pipeline, finished edits move to Plex.
 
-- [ ] Deploy Samba as a Docker container on server01 (per Hard Rule: everything's a container).
-- [ ] Bind-mount target on the OS SSD (970 EVO): `/srv/video-inbox`, with `inbox/` (raw phone dumps), `projects/<name>/` (active edits), `outbox/` (finished, awaiting move).
-- [ ] Per-user SMB credentials (no guest access) — store in password manager.
-- [ ] iOS: connect via Files app → `smb://192.168.8.8`; Settings → Photos → "Transfer to Mac or PC: Keep Originals" to avoid a silent HEVC→H.264 transcode on transfer.
+- [ ] Per-user SMB credentials (no guest access) — store in password manager. Currently a single shared `ian` account across all shares; revisit if finer-grained access is ever needed.
+- [x] iPad connects to the `media` share and streams music from it — confirmed 2026-08-11.
+- [ ] iOS: Settings → Photos → "Transfer to Mac or PC: Keep Originals" to avoid a silent HEVC→H.264 transcode when dropping video into `editing/inbox`.
 - [ ] Test the share from the Windows ITX PC.
 - [ ] Once the stack feels valuable enough to want verified remote reach: add the iPad to the existing tailnet, confirm MagicDNS resolves `server01`, test the SMB share over Tailscale (not the LAN IP), and confirm the same path works for Plex remote access (external Plex access is currently OFF by design — Tailscale is the intended future path, no port forwarding).
 

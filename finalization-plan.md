@@ -41,7 +41,7 @@ Close out the partially-built state of the lab. The goal is not "more projects" 
 
 Nothing gets built on assumptions. One or two evenings.
 
-- [ ] Verify whether the rclone OneDrive job actually exists on this box: `systemctl list-timers`, `systemctl status`, `journalctl -u`. Status is currently unknown — it may have been left on the old Intel machine.
+- [x] Verify whether the rclone OneDrive job actually exists on this box — confirmed live: `rclone-onedrive.timer` enabled, firing nightly ~03:00, every run for the past 7+ days exited `status=0/SUCCESS` (15–21 min each). See `maintenance.md` Log 2026-08-11.
 - [ ] Full drive inventory: device, by-id path, capacity, free space, filesystem, current mountpoint
 - [ ] SMART check every drive before trusting anything to it
 - [ ] Inventory where music files currently live (Eversolo NVMe, PC, any other device)
@@ -65,7 +65,7 @@ Tasks:
 - [ ] Finalize mountpoints and fstab entries (by-id, `nofail`)
 - [ ] Stand up or repair rclone → OneDrive for irreplaceable data only; copy-not-sync
 - [ ] systemd oneshot + nightly timer; confirm it fires
-- [ ] **Restore test** — pull a file back from OneDrive and verify. An untested backup is not a backup.
+- [x] **Restore test** — done 2026-08-11 via a read-only Samba share of `/mnt/backup` mapped from the Windows PC; opened several real files directly from the backup copy and confirmed they're intact.
 - [ ] Immich: install the MX500 (bracket purchase = approved blocker), mount at `/mnt/photos`, then start the container, then restore the pg_dump from `/mnt/backup/migration`. In that order.
 
 **Done when:** a nightly job runs unattended, failure is visible, and a restore has been performed successfully at least once.
@@ -74,7 +74,7 @@ Tasks:
 
 ## Phase 2 — File migration
 
-- [ ] **Music** — the actual problem is scattered files with no single library location, not tagging. Pick one canonical path on server01. Pull the Eversolo NVMe rips over. Consolidate every other copy into it. Then point Plex/Plexamp at that one folder.
+- [ ] **Music** — canonical path decided: `/mnt/media/music` (already existed with 78GB from the original bring-up rsync, same drive Plex already uses). Now reachable read-write over the network via the `media` Samba share (see `decisions.md`). In progress: pulling the Eversolo DMP-A6 Gen 2's rips over via the PC as middleman (blocked as of 2026-08-12 on the A6's SMB login from Windows — see `maintenance.md` Gotchas → Eversolo). Remaining after that: consolidate every other scattered copy (PC, etc.), dedupe, confirm Plex/Plexamp already points at this exact folder.
 - [ ] **Plex media** — move to final location, update library paths, verify transcoding still pins the RTX 2070
 - [ ] **Documents/backups** — consolidate to a single tree
 - [ ] **Frigate recordings** — define a dedicated path with an explicit retention policy (see Phase 3)

@@ -1,0 +1,29 @@
+# /opt/stacks/samba/compose.yml
+# Samba — read-only share of the OneDrive pull-down backup (/mnt/backup),
+# for restore-verification and general personal-file access from Windows/iOS.
+# Secrets live in ./.env (gitignored). Never commit the real password.
+
+services:
+  samba:
+    container_name: samba
+    image: dperson/samba:latest
+    restart: unless-stopped
+
+    environment:
+      TZ: America/Denver
+      USERID: "1000"
+      GROUPID: "1000"
+
+    ports:
+      - "139:139"
+      - "445:445"
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /mnt/backup:/mnt/backup:ro
+      - /mnt/media:/mnt/media
+
+    command: >
+      -u "ian;${SAMBA_PASSWORD}"
+      -s "backup;/mnt/backup;yes;yes;no;ian"
+      -s "media;/mnt/media;yes;no;no;ian"
