@@ -42,8 +42,8 @@ Close out the partially-built state of the lab. The goal is not "more projects" 
 Nothing gets built on assumptions. One or two evenings.
 
 - [x] Verify whether the rclone OneDrive job actually exists on this box — confirmed live: `rclone-onedrive.timer` enabled, firing nightly ~03:00, every run for the past 7+ days exited `status=0/SUCCESS` (15–21 min each). See `maintenance.md` Log 2026-08-11.
-- [ ] Full drive inventory: device, by-id path, capacity, free space, filesystem, current mountpoint
-- [ ] SMART check every drive before trusting anything to it
+- [x] Full drive inventory: device, by-id path, capacity, free space, filesystem, current mountpoint — done 2026-08-12, cross-checked against `parts-inventory.md` (already accurate, no drift). See `df -h` output in `maintenance.md` 2026-08-11 log and `lsblk`/by-id listing in the 2026-08-12 log.
+- [ ] SMART check every drive before trusting anything to it — long self-tests started 2026-08-12 on the OS SSD, Docker NVMe, and the three spinning drives; results pending. WD Blue not tested (still physically pulled from the case).
 - [ ] Inventory where music files currently live (Eversolo NVMe, PC, any other device)
 - [ ] Write the target storage map into the repo before moving a single file
 

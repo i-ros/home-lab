@@ -17,7 +17,8 @@ The "why" behind how the home lab is built — durable rules, per-service design
    - **Local network details are fine to commit and should be** — private-range IPs (192.168.x.x), MACs, hostnames. They're meaningless outside the LAN and make the docs actually usable. Don't over-redact these.
    - Default posture: specific where it's generic/local, strict where it's a credential. Ask when unsure.
 8. **Long-running jobs go in tmux, always** — stderr captured to a file, output paths on persistent storage (not `/tmp`) if they need to survive a reboot.
-9. **Two identical WD Red 4TB drives exist** — resolve by serial before any destructive drive operation (see `parts-inventory.md`).
+9. **UFW is active on server01**, default deny incoming / allow outgoing, with explicit allows for SSH and every service port in use (see `maintenance.md` 2026-08-12 log for the current list). Any new service that needs a port reachable from the LAN needs a matching `ufw allow` — add it in the same session as the service, not as an afterthought.
+10. **Two identical WD Red 4TB drives exist** — resolve by serial before any destructive drive operation (see `parts-inventory.md`).
 
 ## Frigate design decisions
 

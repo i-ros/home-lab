@@ -39,7 +39,6 @@ Blocked on the Samsung 500GB spare-space decision (see `decisions.md` → Open D
 
 ## Monitoring & UPS
 
-- [ ] `node_exporter` (:9100) + `smartctl_exporter` (:9633) on server01 for the RPi5 Prometheus scrape (target = 192.168.8.8).
 - [ ] Wire up NUT: RPi5 = server (USB cable from the CyberPower CP1500PFCLCD), server01 = netclient for early shutdown. USB cable not yet connected.
 - [ ] Back up the MikroTik CSS610 switch config (loose end, low priority).
 
@@ -59,7 +58,6 @@ Note: this replaces the dead Proton Drive Files integration — Proton dropped i
 
 - [ ] **Rotate the Mealie Postgres password** — the current value was committed to git history in an earlier version of the old planning doc. Private repo + low-value LAN password = not urgent, but rotation (not just deletion) is the correct fix since git history is permanent. Generate a new password, update both the `mealie` and `postgres` services in `/opt/stacks/mealie/compose.yaml`, then either recreate the DB or run `ALTER USER mealie PASSWORD` inside the container (sequence TBD at execution time) before `docker compose down && up -d`. Update the password manager entry after.
 - [ ] Execute the WD Blue decision once the SMART long test is run (see `decisions.md` → Open Decisions) — SMR + prior SATA errors make retirement likely.
-- [ ] UFW baseline (SSH + service ports) — nothing is firewalled on server01 currently.
 - [ ] Unattended-upgrades.
 - [ ] Media library cleanup: `(copy N)` duplicate DVR files + macOS cruft (`.DS_Store`, `AlbumArt_*.jpg`) on `/mnt/media` — cosmetic, dedupe at leisure once Plex's scan settles.
 - [ ] Document the final fstab + compose tree.
