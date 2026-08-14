@@ -6,9 +6,11 @@ See `decisions.md` for the "why" behind any approach referenced here, and `parts
 
 ---
 
-## Frigate (camera/NVR)
+## Frigate (camera/NVR) — on hold pending camera relocation
 
-- [ ] **Update `config.yml` camera name** — still uses `living_room`; rename to `reolink_e1_zoom_eth` (cameras were physically relocated, dropped location-based naming — see `decisions.md`) before first bring-up.
+Both E1 cameras are being physically moved to monitor entry points into the house (security focus) and will likely run on WiFi instead of ethernet. Everything below is blocked until the move is finalized and Ian provides the new names.
+
+- [ ] **Update `config.yml` camera names** — final names TBD from Ian once the physical move is done (previous plan, `reolink_e1_zoom_eth`/`reolink_e1_pro_eth`, is void — the `_eth` suffix won't hold if the move is to WiFi).
 - [ ] **Run the Frigate bring-up runbook** (never yet executed — do this on server01, one command at a time, in tmux):
   1. `mkdir -p /opt/stacks/frigate/config/model_cache`; place `compose.yml` at `/opt/stacks/frigate/`, `config.yml` at `/opt/stacks/frigate/config/`
   2. Create `.env` from `env.example`, fill real MQTT/RTSP passwords, `chmod 600 /opt/stacks/frigate/.env`
@@ -32,8 +34,7 @@ See `decisions.md` for the "why" behind any approach referenced here, and `parts
 Blocked on the Samsung 500GB spare-space decision (see `decisions.md` → Open Decisions).
 
 - [ ] Resolve the photo-storage-location decision.
-- [ ] From the Windows ITX PC: WSL2 `wsl --mount` the old Crucial SSD, rsync originals → server01, check for a `pg_dump` in its old `/mnt/backup/migration`, `wsl --unmount` after.
-- [ ] Reconcile old-SSD originals with the OneDrive `immich` folder already being pulled to `/mnt/backup` by rclone — same photos may exist in both places.
+- [ ] Old Immich originals: the Crucial SSD recovery path is dead (drive confirmed empty, see `decisions.md`). Sole remaining source is the OneDrive `immich` folder already being pulled to `/mnt/backup` by rclone.
 - [ ] Stand up the compose stack once storage location is decided; DB on fast storage.
 - [ ] Restore the `pg_dump` if one was found, else fresh library + re-import.
 

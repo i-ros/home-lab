@@ -41,7 +41,8 @@ Indoor-only learning setup for now — no fixed room assignments yet, so cameras
 
 - **RPi5** — separate box, planned role: Prometheus/Grafana + NUT server for server01's UPS. Out of scope for server01 detail except its exporters/clients running on server01 (see `todo.md` → Monitoring & UPS).
 - **MikroTik CSS610** — network switch. Config backup still outstanding (see `todo.md` → Monitoring & UPS).
-- **Old ITX PC (retired)** — Windows box, formerly ran the pre-rebuild setup. Still physically holds a Crucial 500GB SATA SSD with the old Immich library intact (ext4, case not yet opened/reformatted) — see `todo.md` → Immich for the planned WSL2 migration path.
+- **Old ITX PC (retired)** — Windows box, formerly ran the pre-rebuild setup. Being rebuilt with a fresh drive lineup: Samsung 970 EVO 300GB NVMe (Windows/OS), TeamGroup T-Force G50 512GB NVMe (swapped in from the Eversolo DMP-A6, replacing the ITX's old 128GB NVMe), Crucial 500GB SATA SSD (confirmed empty — the old Immich library is not on it, see `decisions.md`), TeamGroup AX2 1TB SATA SSD (new, replacing the WD 2.5" HDD being removed). ~2TB fast (NVMe+SATA SSD) storage total, low power draw for the form factor.
+- **Eversolo DMP-A6 Gen 2** — network media streamer/DAC (see `maintenance.md` → Gotchas for its SMB behavior). Internal NVMe swapped from 512GB (TeamGroup T-Force G50, moved to the ITX rebuild) to 128GB (the ITX's old drive).
 
 ## Live Services (server01)
 
