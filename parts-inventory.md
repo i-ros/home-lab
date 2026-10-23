@@ -8,7 +8,7 @@ Owned hardware and planned/researching items. **No purchase records here, ever**
 
 **CPU/board:** Ryzen 7 2700X on MSI X470 (stable BIOS flashed). Subjectively snappier than the retired ITX/265K build it replaced — not raw silicon (265K is faster on paper) but the plumbing: media on direct SATA instead of a USB-C enclosure, Docker root on Gen4 NVMe, fresh minimal install, less service contention.
 
-**GPU:** RTX 2070 — driver 580-server (580.159.03), CUDA 13.0, Container Toolkit 1.19.1. Shared between Plex (NVENC transcode, HW-confirmed live) and Frigate (NVDEC decode + ONNX/TensorRT inference). 8GB VRAM — watch usage as camera count grows.
+**GPU:** RTX 2070 — driver 580-server (580.178.04 as of 2026-10-22; see `maintenance.md` for a driver/library mismatch incident on that date), CUDA 13.0, Container Toolkit 1.19.1. Shared between Plex (NVENC transcode, HW-confirmed live) and Frigate (NVDEC decode + ONNX/TensorRT inference). 8GB VRAM — watch usage as camera count grows.
 
 **Network:** `eno1` (MAC `30:9c:23:d5:68:f8`) → `192.168.8.8`, ethernet, primary, reserved on the Brume 3 router. `192.168.8.7` = WiFi, disabled, break-glass only. DHCP + MAC-match via netplan.
 
@@ -31,9 +31,9 @@ Owned hardware and planned/researching items. **No purchase records here, ever**
 
 | Camera | Model | Hostname | IP | Status |
 |---|---|---|---|---|
-| E1 Zoom | Reolink E1 Zoom (PT) | `reolink-e1-zoom` | 192.168.8.106 (ethernet) | Owned, streams ffprobe-verified, config pending rename |
-| E1 Pro | Reolink E1 Pro | `reolink-e1-pro` | 192.168.8.103 (ethernet) | Owned, connected, streams not yet probed |
-| Doorbell | Reolink doorbell | TBD | TBD | Owned, not yet hooked up |
+| E1 Zoom | Reolink E1 Zoom (PT) | `reolink-e1-zoom` | 192.168.8.106 (ethernet) | Owned, live — Frigate camera name `reolink_e1_zoom` |
+| E1 Pro | Reolink E1 Pro | `reolink-e1-pro` | 192.168.8.104 (WiFi — moved from .103/ethernet, 2026-10-22) | Owned, live — Frigate camera name `reolink_e1_pro_wifi` |
+| Doorbell | Reolink doorbell | `reolink-doorbell` | 192.168.8.107 | Owned, live — Frigate camera name `reolink_doorbell` |
 
 Indoor-only learning setup for now — no fixed room assignments yet, so cameras are named by hostname rather than location.
 
@@ -41,11 +41,9 @@ Indoor-only learning setup for now — no fixed room assignments yet, so cameras
 
 - **RPi5** — separate box, planned role: Prometheus/Grafana + NUT server for server01's UPS. Out of scope for server01 detail except its exporters/clients running on server01 (see `todo.md` → Monitoring & UPS).
 - **MikroTik CSS610** — network switch. Config backup still outstanding (see `todo.md` → Monitoring & UPS).
-- **ITX PC (desktop)** — Windows 11, rebuild complete and back in daily use. Drives: Samsung 970 EVO 300GB NVMe (OS), Crucial 500GB SATA SSD (confirmed empty — the old Immich library is not on it, see `decisions.md`), TeamGroup AX2 1TB SATA SSD (new, replacing the removed WD 2.5" HDD), and its original 128GB NVMe retained in place (pulling the board to swap in the spare 512GB was more effort than it was worth) — earmarked for video editing scratch once a tool is chosen. Noctua cooler retained. External drive enclosure no longer used — internal drives only. Also now handles CD-ripping duties, previously the Eversolo's job. Powered 7-port Pluggable USB-A hub added (USB-A into the ITX), feeding the SMSL DDC for desktop audio — see Desktop audio setup below.
-- **Eversolo DMP-A6 Gen 2** — network media streamer/DAC (see `maintenance.md` → Gotchas for its SMB behavior). Moved off the desk into the main audio setup (see below), no longer paired with the ITX. Internal NVMe pulled entirely — see TeamGroup T-Force G50 note below.
-- **TeamGroup T-Force G50 512GB NVMe** — pulled from the Eversolo, now in an external enclosure as a general file-transfer/scratch drive. Not part of any build.
-- **Main audio setup** — Eversolo DMP-A6 Gen 2 (DAC/streamer); Waxwing phono preamp (optical into the Eversolo); SMSL CD player (coaxial into the Eversolo); Rega Exon 3s (amps); Dynaudio Audience 60 towers. Everything else previously in rotation is on the shelf, pending a decision on what to sell.
-- **Desktop audio setup (ITX)** — KEF LSX LT II speakers; RSL 10" Speedwoofer subwoofer (the higher-end model); SMSL DDC feeding the KEFs via optical, fed in turn by the Pluggable USB-A hub off the ITX; a work dock also feeds the DDC over USB; subwoofer cable from Blue Jeans Cables.
+- **ITX PC (desktop)** — Windows 11, rebuild complete and back in daily use. Drives: Samsung 970 EVO 300GB NVMe (OS), Crucial 500GB SATA SSD (confirmed empty — the old Immich library is not on it, see `decisions.md`), TeamGroup AX2 1TB SATA SSD (new, replacing the removed WD 2.5" HDD), and its original 128GB NVMe retained in place (pulling the board to swap in the spare 512GB was more effort than it was worth) — earmarked for video editing scratch once a tool is chosen. Noctua cooler retained. External drive enclosure no longer used — internal drives only.
+- **Eversolo DMP-A6 Gen 2** — see `maintenance.md` → Gotchas for its SMB behavior when transferring files to/from it over the network. (Its role/config is otherwise tracked in the separate home-audio repo, not here.)
+- **TeamGroup T-Force G50 512GB NVMe** — now in an external enclosure as a general file-transfer/scratch drive. Not part of any build.
 
 ## Live Services (server01)
 
@@ -53,8 +51,9 @@ Indoor-only learning setup for now — no fixed room assignments yet, so cameras
 |---|---|---|---|
 | Mealie | http://192.168.8.8:9925 | `/opt/stacks/mealie/` — mealie v3.20.1 + postgres:17, bind mounts, `ALLOW_SIGNUP=false` | Live |
 | Plex | http://192.168.8.8:32400/web | `/opt/stacks/plex/` — lscr.io/linuxserver/plex, host net, NVENC pinned to RTX 2070 (HW-confirmed), `/mnt/media` ro, tmpfs `/transcode` | Live, fresh identity claimed. External access OFF by design (see `decisions.md`) |
-| Frigate | http://192.168.8.8:8971 (once up) | `/opt/stacks/frigate/` — `0.17.2-tensorrt` image, ONNX detector, go2rtc restream, recordings → `/mnt/frigate` | Bring-up pending — see `todo.md` → Frigate |
-| rclone (host service, not a container) | — | Remote `onedrive` → `/mnt/backup`, config at `~/.config/rclone/rclone.conf` (never committed — holds the refresh token) | Initial `copy` sync in progress; systemd timer to follow — see `todo.md` → Backup |
+| Frigate | http://192.168.8.8:8971 | `/opt/stacks/frigate/` — `0.17.2-tensorrt` image, ONNX detector, go2rtc restream, recordings → `/mnt/frigate` | Live — 3 cameras, GPU inference confirmed |
+| Immich | http://192.168.8.8:2283 | `/opt/stacks/immich/` — v3.3.5, DB/ML cache on OS SSD, library on `/mnt/backup/immich-library/`, CPU-only ML | Live — External Library added for the curated photo set (scanning) |
+| rclone (host service, not a container) | — | Remote `onedrive` → `/mnt/backup`, config at `~/.config/rclone/rclone.conf` (never committed — holds the refresh token) | Nightly timer, healthy — see `maintenance.md` |
 
 ## Planned / researching
 

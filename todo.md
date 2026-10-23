@@ -6,37 +6,27 @@ See `decisions.md` for the "why" behind any approach referenced here, and `parts
 
 ---
 
-## Frigate (camera/NVR) — on hold pending camera relocation
+## Frigate (camera/NVR)
 
-Both E1 cameras are being physically moved to monitor entry points into the house (security focus) and will likely run on WiFi instead of ethernet. Everything below is blocked until the move is finalized and Ian provides the new names.
+Live. All three cameras running — `reolink_e1_zoom`, `reolink_doorbell`, `reolink_e1_pro_wifi` (E1 Pro relocated to WiFi, see `maintenance.md` 2026-10-22). GPU inference, HA integration, and `person`-event alerting all confirmed working.
 
-- [ ] **Update `config.yml` camera names** — final names TBD from Ian once the physical move is done (previous plan, `reolink_e1_zoom_eth`/`reolink_e1_pro_eth`, is void — the `_eth` suffix won't hold if the move is to WiFi).
-- [ ] **Run the Frigate bring-up runbook** (never yet executed — do this on server01, one command at a time, in tmux):
-  1. `mkdir -p /opt/stacks/frigate/config/model_cache`; place `compose.yml` at `/opt/stacks/frigate/`, `config.yml` at `/opt/stacks/frigate/config/`
-  2. Create `.env` from `env.example`, fill real MQTT/RTSP passwords, `chmod 600 /opt/stacks/frigate/.env`
-  3. Export YOLOv9-s ONNX model (docker build command in `decisions.md` under Frigate) — confirm `yolov9-s-320.onnx` lands in `model_cache/`
-  4. `docker compose up -d`, `docker compose logs -f` — watch for TensorRT engine build, go2rtc connecting, detector on GPU (not CPU), MQTT connected, and the one-time auto-generated admin password (save it)
-  5. Verify at `http://192.168.8.8:8971` — live view, walk-in triggers a `person` event, System Metrics shows GPU inference ~10-20ms
-- [ ] **Re-point HA Frigate integration** to `http://192.168.8.8:8971` once bring-up is verified.
-- [ ] ffprobe the E1 Pro (192.168.8.103) to get its real RTSP stream paths — do not assume they match the E1 Zoom's.
-- [ ] Add `reolink_e1_pro_eth` camera block to `config.yml` once its paths are verified (own go2rtc streams + camera block).
-- [ ] Hook up the Reolink doorbell — new go2rtc streams + camera block, plus doorbell-specific config (button-press event, two-way audio).
 - [ ] Create a dedicated least-privilege Reolink user per camera (web UI → System → User Management) and swap `admin` out of configs/passwords.
-- [ ] Decide audio-recording policy per camera — some US states are two-party-consent for audio; both E1 Zoom streams currently carry AAC audio that gets recorded by default.
-- [ ] Per-camera zones + masks once physical locations are finalized — cuts false positives.
+- [ ] Decide audio-recording policy — some US states are two-party-consent for audio; all three cameras' main streams carry AAC audio that gets recorded by default.
+- [ ] Per-camera zones + masks now that physical locations are settled — cuts false positives.
 - [ ] Decide on birdseye view and whether to expose it.
-- [ ] Revisit dropping port 5000 (unauthenticated UI) once auth + HA integration are settled.
 - [ ] Tune retention per camera once real disk-usage/day is observed (currently 3-day continuous / 30-day events, a starting guess).
 - [ ] (Optional, only if camera count outpaces one detector) add a second ONNX detector instance.
+- [ ] Harden `nvidia-persistenced` against silent breakage — it's a systemd `static` unit with no auto-restart, so if it dies (as it did 2026-09-11) the GPU looks fine until something tries to use it, then every GPU container fails to start at creation. See `maintenance.md` 2026-10-22 and Gotchas.
 
-## Immich — on hold
+## Immich
 
-Blocked on the Samsung 500GB spare-space decision (see `decisions.md` → Open Decisions).
+Live as of 2026-10-23 (`v3.3.5`, CPU-only ML — see `decisions.md`). Storage decision resolved: Postgres + ML cache on the OS SSD (`/opt/stacks/immich/`), native upload library on `/mnt/backup/immich-library/`, and the existing curated photos (`/mnt/backup/onedrive/Pictures/immich/` — `professional`/`wedding`/`years`, 39GB) added as a read-only External Library rather than duplicated.
 
-- [ ] Resolve the photo-storage-location decision.
-- [ ] Old Immich originals: the Crucial SSD recovery path is dead (drive confirmed empty, see `decisions.md`). Sole remaining source is the OneDrive `immich` folder already being pulled to `/mnt/backup` by rclone.
-- [ ] Stand up the compose stack once storage location is decided; DB on fast storage.
-- [ ] Restore the `pg_dump` if one was found, else fresh library + re-import.
+- [ ] Confirm the External Library scan finished and the asset count looks right (39GB across the 3 curated folders).
+- [ ] Set the External Library rescan schedule (Administration → Settings → External Library) to ~04:00 daily, safely after the rclone OneDrive pull (~03:00–03:30) finishes each night.
+- [ ] **Build a reverse backup job for new phone uploads.** Nothing currently protects `/mnt/backup/immich-library/` off this one drive — the existing rclone job only pulls *from* OneDrive. Needs a second rclone job pushing that folder (or just its originals) up to a dedicated OneDrive folder, on its own timer, mirroring the existing pattern.
+- [ ] Set up the Immich mobile app on your phone (and your wife's, later) for automatic photo backup — this is what will actually start filling `immich-library/`.
+- [ ] Decide if any exclusion patterns are needed on the curated External Library (e.g. raw/sidecar files) — not yet assessed.
 
 ## Monitoring & UPS
 
