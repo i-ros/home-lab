@@ -56,3 +56,21 @@ Note: this replaces the dead Proton Drive Files integration — Proton dropped i
 ## Process
 
 - [ ] Training session owed: tmux fundamentals, the canonical verify workflow (hash both sides identically, `LC_ALL=C sort`, `comm -23 src dst | wc -l` → 0 = clean), iPad/Termius drills — so a repeat of the 2026-07-08 manifest-verify confusion doesn't happen again.
+
+
+## RPi5 monitoring (paused 2026-10-27)
+Done:
+- server01 scrape targets fixed (.3 → .8, relabeled server01)
+- Pi node-exporter added to ~/monitoring compose (rpi5 target)
+- Grafana alerting provisioned: ha-push contact point, 4 rules in Homelab folder
+- HA automation grafana_alert_push → notify.mobile_app_ishit
+- Webhook ID in Proton Pass (grafana-webhook-HA); URL in ~/monitoring/.env (gitignored)
+
+Next:
+- [ ] Grafana UI: confirm 4 rules Normal + ha-push contact point
+- [ ] E2E test: `docker compose stop node-exporter`, wait ~7 min for push, then `start`
+- [ ] Optional: `mkdir -p grafana/provisioning/{dashboards,plugins}` to quiet log errors
+- [ ] Commit ~/monitoring changes to repo (exclude .env)
+- [ ] Brume 3: remove old .3 reservation, reserve .8 for server01
+- [ ] Pi has two LAN IPs (.4/.5): settle on one
+- [ ] Then: cAdvisor on server01 → app metrics (Frigate/Immich/Plex) → UPS/NUT
